@@ -1,0 +1,87 @@
+name: Update river data
+
+# TVA sends no CORS headers, so the browser can't read tva.com directly. Instead of
+# running a server to proxy it, this job reads TVA on a schedule and commits the
+# result as a plain file the page can fetch same-origin. No compute per visitor.
+on:
+  schedule:
+    - cron: "*/30 * * * *"     # every half hour; TVA's observed feed is hourly
+  workflow_dispatch:            # and a "Run workflow" button for on-demand
+
+permissions:
+  contents: write
+
+concurrency:
+  group: river-data
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Read TVA
+        run: |
+          mkdir -p data
+          cat > /tmp/fetch.mjs <<'SCRIPT'
+          import { writeFile } from "node:fs/promises";
+
+          const EP = {
+            observed: "observed-data-48-hours",
+            schedule: "generation-releases",
+            forecast: "predicted-data",
+            guide:    "operating-guide",
+          };
+
+          const out = { fetchedAt: new Date().toISOString(), errors: [] };
+
+          for (const [key, ep] of Object.entries(EP)) {
+            // ?format=json is ServiceStack content negotiation. Without it TVA
+            // returns an HTML page instead of the data.
+            const url = `https://www.tva.com/RestApi/${ep}/CRKT1?format=json`;
+            try {
+              const r = await fetch(url, {
+                headers: {
+                  Accept: "application/json",
+                  "User-Agent": "holston-river-planner (github actions)",
+                },
+              });
+              if (!r.ok) throw new Error("HTTP " + r.status);
+              const text = await r.text();
+              const t = text.trim();
+              if (!t.startsWith("[") && !t.startsWith("{"))
+                throw new Error("non-JSON response");
+              out[key] = JSON.parse(text);
+            } catch (e) {
+              out[key] = null;
+              out.errors.push(`${ep}: ${e.message}`);
+            }
+          }
+
+          // If every feed failed, fail the job rather than overwriting good data
+          // with nulls. The app keeps serving the last good file.
+          if (Object.keys(EP).every((k) => out[k] === null)) {
+            console.error("all four feeds failed:", out.errors.join("; "));
+            process.exit(1);
+          }
+
+          await writeFile("data/tva.json", JSON.stringify(out));
+          console.log(
+            "wrote data/tva.json",
+            out.errors.length ? "with errors: " + out.errors.join("; ") : "clean"
+          );
+          SCRIPT
+          node /tmp/fetch.mjs
+
+      - name: Commit
+        run: |
+          git config user.name  "holston-data-bot"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/tva.json
+          if git diff --staged --quiet; then
+            echo "nothing changed"
+          else
+            git commit -m "river data $(date -u +'%Y-%m-%dT%H:%MZ') [skip ci]"
+            git push
+          fi
