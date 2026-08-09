@@ -1,0 +1,1321 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Holston River Planner</title>
+<link rel="manifest" href="./manifest.webmanifest">
+<meta name="theme-color" content="#0a0c10" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#f6f7f9" media="(prefers-color-scheme: light)">
+<link rel="icon" href="./icon-192.png">
+<link rel="apple-touch-icon" href="./apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Holston">
+<meta name="description" content="When the Holston River runs below Cherokee Dam — float times, daylight, and where the release is right now.">
+<style>
+:root{
+  --bg:#f6f7f9; --surface-1:#ffffff; --surface-2:#f1f3f6; --surface-3:#e7eaf0;
+  --rule:#e3e7ed; --rule-soft:#eef1f5;
+  --text-primary:#0d1117; --text-secondary:#4a5262; --text-muted:#7a8494;
+  --series-1:#2a78d6; --series-2:#eb6834; --series-3:#1baf7a;
+  --good:#008300; --warning:#eda100; --critical:#e34948; --night:#4a3aa7;
+  --shadow:0 1px 2px rgba(13,17,23,.05),0 8px 24px -12px rgba(13,17,23,.14);
+  --shadow-lg:0 1px 3px rgba(13,17,23,.06),0 18px 44px -18px rgba(13,17,23,.22);
+  --ring:rgba(42,120,214,.30);
+}
+@media(prefers-color-scheme:dark){:root:not([data-theme=light]){
+  --bg:#0a0c10; --surface-1:#12151c; --surface-2:#1a1e27; --surface-3:#232833;
+  --rule:#262b36; --rule-soft:#1c212b;
+  --text-primary:#f2f4f8; --text-secondary:#a8b0c0; --text-muted:#6e7686;
+  --series-1:#3987e5; --series-2:#d95926; --series-3:#199e70;
+  --good:#4caf50; --warning:#c98500; --critical:#e66767; --night:#9085e9;
+  --shadow:0 1px 2px rgba(0,0,0,.5),0 10px 28px -14px rgba(0,0,0,.7);
+  --shadow-lg:0 1px 3px rgba(0,0,0,.55),0 22px 52px -20px rgba(0,0,0,.8);
+  --ring:rgba(57,135,229,.36);
+}}
+:root[data-theme=dark]{
+  --bg:#0a0c10; --surface-1:#12151c; --surface-2:#1a1e27; --surface-3:#232833;
+  --rule:#262b36; --rule-soft:#1c212b;
+  --text-primary:#f2f4f8; --text-secondary:#a8b0c0; --text-muted:#6e7686;
+  --series-1:#3987e5; --series-2:#d95926; --series-3:#199e70;
+  --good:#4caf50; --warning:#c98500; --critical:#e66767; --night:#9085e9;
+  --shadow:0 1px 2px rgba(0,0,0,.5),0 10px 28px -14px rgba(0,0,0,.7);
+  --shadow-lg:0 1px 3px rgba(0,0,0,.55),0 22px 52px -20px rgba(0,0,0,.8);
+  --ring:rgba(57,135,229,.36);
+}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--text-primary);
+  font:15px/1.55 ui-sans-serif,system-ui,-apple-system,"Segoe UI",Inter,sans-serif;
+  -webkit-font-smoothing:antialiased;font-variant-numeric:tabular-nums}
+.viz-root{min-height:100vh;padding:0 0 90px}
+.wrap{max-width:1160px;margin:0 auto;padding:0 22px}
+.topline{height:3px;background:linear-gradient(90deg,var(--series-1),var(--series-3) 55%,var(--series-2))}
+
+header{display:flex;justify-content:space-between;align-items:center;gap:18px;
+  flex-wrap:wrap;padding:30px 0 22px}
+.brand{display:flex;align-items:center;gap:13px}
+.mark{width:38px;height:38px;border-radius:11px;flex:none;
+  background:linear-gradient(145deg,var(--series-1),var(--series-3));
+  display:grid;place-items:center;box-shadow:var(--shadow)}
+.mark svg{width:21px;height:21px}
+h1{font-size:27px;margin:0;letter-spacing:-.028em;font-weight:660;line-height:1.15}
+.sub{color:var(--text-muted);font-size:13px;margin:2px 0 0;letter-spacing:.005em}
+button{font:inherit;font-size:13px;font-weight:550;padding:8px 14px;border:1px solid var(--rule);
+  background:var(--surface-1);color:var(--text-secondary);border-radius:10px;cursor:pointer;
+  transition:all .15s ease;box-shadow:var(--shadow)}
+button:hover{color:var(--text-primary);border-color:var(--text-muted);transform:translateY(-1px)}
+button:active{transform:translateY(0)}
+
+.card{background:var(--surface-1);border:1px solid var(--rule);border-radius:18px;
+  padding:24px 26px;margin-top:20px;box-shadow:var(--shadow)}
+.card.hero{box-shadow:var(--shadow-lg)}
+.eyebrow{display:flex;align-items:baseline;gap:11px;flex-wrap:wrap;margin-bottom:3px}
+h2{font-size:10.5px;text-transform:uppercase;letter-spacing:.13em;color:var(--text-muted);
+  margin:0;font-weight:680}
+.h2sub{font-size:13.5px;color:var(--text-secondary);margin:0 0 20px;max-width:78ch;line-height:1.6}
+
+.ctl{display:flex;gap:11px;flex-wrap:wrap;align-items:flex-end;margin-bottom:22px;
+  padding:16px 18px;background:var(--surface-2);border-radius:14px}
+.f{display:flex;flex-direction:column;gap:7px}
+.f label{font-size:9.5px;text-transform:uppercase;letter-spacing:.1em;color:var(--text-muted);font-weight:680}
+select,input[type=number]{font:inherit;font-size:13.5px;font-weight:520;padding:9px 11px;
+  border:1px solid var(--rule);border-radius:10px;background:var(--surface-1);
+  color:var(--text-primary);transition:border-color .15s,box-shadow .15s}
+select{appearance:none;padding-right:32px;
+  background-image:linear-gradient(45deg,transparent 50%,currentColor 50%),
+                   linear-gradient(135deg,currentColor 50%,transparent 50%);
+  background-position:calc(100% - 16px) 51%,calc(100% - 11px) 51%;
+  background-size:5px 5px,5px 5px;background-repeat:no-repeat}
+select:focus,input:focus{outline:none;border-color:var(--series-1);box-shadow:0 0 0 3px var(--ring)}
+input[type=range]{-webkit-appearance:none;appearance:none;width:250px;height:26px;
+  background:transparent;outline:none;cursor:pointer;margin:0}
+input[type=range]::-webkit-slider-runnable-track{height:8px;border-radius:99px;
+  background:var(--surface-3);border:1px solid var(--rule)}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:22px;height:22px;
+  margin-top:-8px;border-radius:50%;background:var(--series-1);
+  border:3px solid var(--surface-1);box-shadow:0 2px 10px rgba(0,0,0,.45)}
+input[type=range]:focus::-webkit-slider-thumb{box-shadow:0 0 0 5px var(--ring)}
+input[type=range]::-moz-range-track{height:8px;border-radius:99px;
+  background:var(--surface-3);border:1px solid var(--rule)}
+input[type=range]::-moz-range-thumb{width:18px;height:18px;border-radius:50%;
+  background:var(--series-1);border:3px solid var(--surface-1)}
+.f label b{color:var(--series-1);font-weight:680;letter-spacing:0;text-transform:none;font-size:11.5px}
+
+.verdict{display:grid;grid-template-columns:1.35fr 1fr 1fr;gap:14px}
+@media(max-width:820px){.verdict{grid-template-columns:1fr}}
+.vbox{border-radius:15px;padding:19px 21px;border:1px solid var(--rule);
+  background:var(--surface-2);position:relative;overflow:hidden}
+.vbox::before{content:"";position:absolute;inset:0 auto 0 0;width:3px;background:var(--accent)}
+.vbox .vl{font-size:10px;text-transform:uppercase;letter-spacing:.12em;font-weight:720;color:var(--accent)}
+.vbox .vv{font-size:34px;font-weight:680;letter-spacing:-.035em;margin-top:6px;line-height:1.05}
+.vbox.big .vv{font-size:44px}
+.vbox .vn{font-size:12.5px;margin-top:7px;color:var(--text-secondary);line-height:1.5}
+
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:1px;
+  background:var(--rule);border:1px solid var(--rule);border-radius:15px;overflow:hidden;margin-top:14px}
+.st{background:var(--surface-1);padding:15px 17px}
+.st .l{font-size:9.5px;text-transform:uppercase;letter-spacing:.1em;color:var(--text-muted);font-weight:680}
+.st .v{font-size:20px;font-weight:640;margin-top:5px;letter-spacing:-.02em}
+.st .n{font-size:11.5px;color:var(--text-muted);margin-top:3px;line-height:1.45}
+
+table{width:100%;border-collapse:collapse;font-size:13.5px}
+th,td{text-align:right;padding:11px 12px;border-bottom:1px solid var(--rule-soft)}
+th:first-child,td:first-child{text-align:left}
+th{font-size:9.5px;text-transform:uppercase;letter-spacing:.1em;color:var(--text-muted);
+  font-weight:680;border-bottom:1px solid var(--rule)}
+tbody tr{transition:background .12s}
+tbody tr:hover{background:var(--surface-2)}
+tr.hi{background:var(--surface-2)}
+tr.hi td{font-weight:620}
+tr.hi td:first-child{box-shadow:inset 3px 0 0 var(--series-1)}
+
+.legend{display:flex;gap:20px;flex-wrap:wrap;font-size:12px;color:var(--text-secondary);margin-top:15px}
+.legend span{display:inline-flex;align-items:center;gap:7px}
+.sw{width:10px;height:10px;border-radius:3px;flex:none}
+.note{font-size:13px;color:var(--text-secondary);margin:16px 0 0;line-height:1.65;max-width:88ch}
+.note strong{color:var(--text-primary);font-weight:620}
+svg{display:block;width:100%;height:auto}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:20px}
+@media(max-width:900px){.grid2{grid-template-columns:1fr}}
+.grid2>.card{margin-top:0}
+code{background:var(--surface-2);padding:2px 6px;border-radius:5px;font-size:11.5px;
+  font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+.foot{color:var(--text-muted);font-size:12px;margin-top:26px;line-height:1.8}
+.tip{position:fixed;pointer-events:none;z-index:9;background:var(--surface-1);
+  border:1px solid var(--rule);border-radius:11px;padding:9px 12px;font-size:12.5px;
+  box-shadow:var(--shadow-lg);opacity:0;transition:opacity .12s;max-width:250px;line-height:1.5}
+.tip.on{opacity:1}
+.tip .tt{font-weight:680;font-size:12px;letter-spacing:-.01em;margin-bottom:3px}
+.tip .tr{color:var(--text-secondary);font-size:11.5px}
+.badge{display:inline-flex;align-items:center;gap:7px;font-size:12px;font-weight:600;
+  padding:6px 11px;border-radius:99px;border:1px solid var(--rule);background:var(--surface-1);
+  color:var(--text-secondary);white-space:nowrap}
+.badge i{width:7px;height:7px;border-radius:50%;background:currentColor;flex:none}
+.badge.ok{color:var(--good)} .badge.warn{color:var(--warning)}
+.hdr-right{display:flex;align-items:center;gap:9px;flex-wrap:wrap}
+#install{display:none}
+@media(max-width:640px){
+  .wrap{padding:0 13px}
+  .card{padding:17px 15px;border-radius:15px}
+  h1{font-size:22px}
+  .vbox .vv{font-size:29px} .vbox.big .vv{font-size:35px}
+  .ctl{padding:13px}
+  input[type=range]{width:100%;min-width:200px}
+  .f{flex:1 1 140px}
+  select{width:100%}
+  .legend{gap:11px;font-size:11.5px}
+  table{font-size:12px} th,td{padding:8px 6px}
+}
+</style>
+</head>
+<body><div class="viz-root"><div class="topline"></div><div class="wrap">
+
+<header>
+  <div class="brand">
+    <div class="mark"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.1"
+      stroke-linecap="round"><path d="M2 7c3-2.2 5-2.2 8 0s5 2.2 8 0"/><path d="M2 13c3-2.2 5-2.2 8 0s5 2.2 8 0"/>
+      <path d="M2 19c3-2.2 5-2.2 8 0s5 2.2 8 0"/></svg></div>
+    <div><h1>Holston River</h1>
+    <p class="sub">Cherokee Dam releases · float times · daylight</p></div>
+  </div>
+  <div class="hdr-right">
+    <span class="badge" id="fresh"><i></i>Loading…</span>
+    <button id="install">Install</button>
+    <button id="theme">Theme</button>
+  </div>
+</header>
+
+<!-- ============ PLANNER ============ -->
+<div class="card hero">
+  <div class="eyebrow"><h2>Plan a float</h2></div>
+  <p class="h2sub">The wave moves faster than your boat, so it can catch you mid-float and speed you up. This integrates your position against the moving water instead of assuming one speed.</p>
+  <div class="ctl">
+    <div class="f"><label>Date</label><select id="day"></select></div>
+    <div class="f"><label>Put in</label><select id="putin"></select></div>
+    <div class="f"><label>Take out</label><select id="takeout"></select></div>
+    <div class="f"><label>Launch <b id="lt"></b></label><input type="range" id="launch" min="5" max="21" step="0.0833333"></div>
+    <div class="f"><label>Speed running / still (mph)</label>
+      <div style="display:flex;gap:6px">
+        <input type="number" id="vrun" value="4.2" step="0.1" style="width:72px">
+        <input type="number" id="vstill" value="1.7" step="0.05" style="width:72px"></div></div>
+  </div>
+  <div class="verdict" id="verdict"></div>
+  <div class="stats" id="stats"></div>
+  <div class="tip" id="tip"></div>
+  <svg id="trip" viewBox="0 0 1000 340" role="img" aria-label="Boat position against the release wave over time"></svg>
+  <div class="legend">
+    <span><i class="sw" style="background:var(--series-1)"></i>Wave front (water arrives)</span>
+    <span><i class="sw" style="background:var(--series-2)"></i>Wave tail (water drops)</span>
+    <span><i class="sw" style="background:var(--series-3)"></i>Your boat</span>
+    <span><i class="sw" style="background:var(--night)"></i>After sunset</span>
+  </div>
+  <p class="note" id="tripnote"></p>
+</div>
+
+<!-- ============ LAUNCH SCANNER ============ -->
+<div class="card">
+  <div class="eyebrow"><h2>Best launch window</h2></div>
+  <p class="h2sub">Every launch time from dawn to dusk, scored on whether you take out in daylight and how much of the float rides moving water.</p>
+  <svg id="scan" viewBox="0 0 1000 186" role="img" aria-label="Launch time quality across the day"></svg>
+  <div class="legend">
+    <span><i class="sw" style="background:var(--good)"></i>Go — 45+ min of daylight left</span>
+    <span><i class="sw" style="background:var(--warning)"></i>Tight — landing right at sunset</span>
+    <span><i class="sw" style="background:var(--critical)"></i>No — you finish after dark</span>
+    <span><i class="sw" style="background:var(--series-1)"></i>Share of the float on moving water</span>
+  </div>
+  <p class="note" id="scannote"></p>
+</div>
+
+<!-- ============ OUTLOOK ============ -->
+<div class="card">
+  <div class="eyebrow"><h2>Ten-week outlook</h2></div>
+  <p class="h2sub">Days 1–3 are TVA's published flow forecast. Beyond that the operating guide's drawdown schedule sets how much water <em>has</em> to move, split by the weekday/weekend demand pattern.</p>
+  <svg id="outlook" viewBox="0 0 1000 300" role="img" aria-label="Predicted average daily outflow over ten weeks"></svg>
+  <p class="note" id="outnote"></p>
+</div>
+
+<!-- ============ SEASONAL + MAP ============ -->
+<div class="card">
+  <div class="eyebrow"><h2>The river, right now</h2></div>
+  <p class="h2sub">Actual channel geometry from Cherokee Dam to the Forks of the River. The blue stretch is where the water is up at the moment on the scrubber — drag it and watch the release move down the river.</p>
+  <div class="ctl" style="margin-bottom:14px">
+    <div class="f"><label>River at <b id="mtLab"></b></label>
+      <input type="range" id="mapTime" min="0" max="47.9" step="0.1" style="width:340px"></div>
+    <div class="f"><label>&nbsp;</label><button id="mapNow">Jump to launch</button></div>
+  </div>
+  <svg id="map" viewBox="0 0 1000 780" role="img" aria-label="Map of the Holston River below Cherokee Dam showing where the release has reached"></svg>
+  <div class="legend">
+    <span><i class="sw" style="background:var(--series-1)"></i>Water up (line thickness = size of the rise)</span>
+    <span><i class="sw" style="background:var(--surface-3)"></i>Dead</span>
+    <span><i class="sw" style="background:var(--series-3)"></i>Your reach</span>
+    <span><i class="sw" style="background:var(--series-2)"></i>Your boat</span>
+  </div>
+  <p class="note" id="mapnote"></p>
+</div>
+
+<div class="grid2">
+  <div class="card">
+    <div class="eyebrow"><h2>The season</h2></div>
+    <p class="h2sub">Guide curve and the outflow it implies.</p>
+    <svg id="season" viewBox="0 0 520 300" role="img" aria-label="Reservoir guide curve and implied outflow by month"></svg>
+    <p class="note" id="seasnote"></p>
+  </div>
+  <div class="card">
+    <div class="eyebrow"><h2>Float times between access points</h2></div>
+    <p class="h2sub">Running / still, at your current speeds.</p>
+    <table id="legs"></table>
+    <p class="note">Strawberry Plains is marked ≈ — I could not verify its river mile, and everything below it shifts if it is wrong.</p>
+  </div>
+</div>
+
+<div class="card">
+  <div class="eyebrow"><h2>Travel time from the dam</h2></div>
+  <table id="tt"></table>
+  <p class="note">Hours from generation start to first rise. Anchored on TVA river-forecasting guidance — 6–12 h at River Ranch, 18–30 h near Knoxville — with celerity scaling as Q<sup>0.66</sup>. The <strong>spread</strong> column is how much longer the release takes to pass than it took to leave — a 3-hour release at the dam is an 8-hour rise at your place, and a correspondingly smaller one. That is why a one-hour minimum-flow pulse arrives at Nances Ferry as ~810 cfs and floats nobody.</p>
+</div>
+
+<p class="foot">
+Sources — TVA <code>RestApi/{observed-data-48-hours, generation-releases, predicted-data, operating-guide}/CRKT1</code>;
+NOAA NWPS <code>gauges/CRLT1</code>; USGS <code>03495005</code> Flat Creek (rain detector).
+Travel-time anchors and scheduling behaviour per TVA river-forecasting guidance.
+River miles from the TVA Holston blueway map. Sun times computed with the NOAA solar algorithm for 36.10°N, 83.63°W.
+</p>
+
+</div></div>
+<script>
+/* ═══════════ DATA ═══════════ */
+const DAM=52.3;
+const PTS=[
+ {k:"dam",  rm:52.3, n:"Cherokee Dam"},
+ {k:"indian",rm:39.99,n:"Indian Cave Park"},
+ {k:"nances",rm:33.24,n:"Nances Ferry"},
+ {k:"home", rm:27.0, n:"River Ranch"},
+ {k:"straw",rm:22.0, n:"Strawberry Plains ≈"},
+ {k:"mcbee",rm:17.0, n:"McBee Ferry"},
+ {k:"ashe", rm:6.57, n:"Asheville Hwy Bridge"},
+ {k:"forks",rm:0.0,  n:"Forks of the River"}];
+const UNIT_CFS={0:0,1:3890,2:7610,3:11150};
+const C_REF={q:3890,c:2.108}, C_EXP=0.658, BREAK=25.3;
+const C_LO={slow:1.50,fast:2.25}, C_UP={slow:2.108,fast:4.217};
+const LAT=36.10, LON=-83.63;
+
+// Real channel geometry: the Holston centreline from Cherokee Dam to the Forks of
+// the River, from OpenStreetMap, simplified to 135 vertices and delta-encoded at
+// 1e-4 deg. The full-resolution line measures 52.59 mi against TVA's published
+// 52.3 river miles -- 0.55% apart over fifty miles, which is what lets every access
+// point be placed by arc length instead of guessed at.
+const RIVER_ORIGIN=[361664,-834987];
+const RIVER_DELTAS="27,-72;81,-84;11,-39;-23,-29;-111,-33;-17,-24;-1,-31;47,-53;103,-3;31,-18;7,-60;-23,-57;0,-88;90,-21;30,-31;0,-29;-11,-13;-38,-4;-117,59;-55,-5;-38,-46;3,-55;22,-59;-5,-37;-21,-8;-81,24;-31,-21;-2,-38;11,-28;26,-7;54,12;27,-13;3,-36;-27,-48;-126,-36;-71,23;-38,-15;-14,-39;27,-54;-11,-22;-38,16;-32,39;-27,-1;-3,-30;31,-31;100,-52;0,-28;-42,-45;-6,-24;58,-43;9,-25;-12,-27;-101,-19;-61,15;-16,22;-11,59;-23,24;-180,-13;-45,-18;-34,-122;28,-82;55,-34;18,5;26,44;27,19;60,-29;30,-150;28,-76;-14,-21;-93,-7;-56,52;-73,18;-94,88;-48,9;-33,-20;-26,-54;17,-89;115,-141;19,-48;6,-75;-21,-65;-26,-17;-61,8;-29,29;-129,74;-66,66;-27,-2;-22,-24;-8,-47;50,-139;2,-37;-20,-36;-97,-43;-12,-37;12,-69;41,-41;15,-34;-5,-28;-38,-47;-2,-36;83,-46;11,-29;-4,-36;-10,-22;-40,-30;-108,-12;-41,-35;-3,-36;54,-52;3,-45;-88,-50;-3,-25;29,-57;1,-34;-90,-30;-4,-103;-14,-12;-63,3;-9,-18;4,-53;-22,-53;-24,-7;-127,70;-67,6;-18,-64;-68,-30;-12,-19;-12,-53;22,-104;-22,-44;-21,-10;-34,-4;-130,68;-100,5";
+
+// A release does not arrive downstream as the same shape it left. It spreads, and a
+// short pulse spreads until there is nothing left to ride -- which is exactly why
+// the every-6-hours single-generator minimum-flow pulses do not float anybody
+// twenty miles down, and why "the water arrived" is not the same as "it's running".
+// Pulse duration grows by ~0.20 h per mile; the same volume over a longer window
+// means a smaller rise.
+const SPREAD_H_PER_MI=0.20;
+const MIN_USABLE_CFS=2000;   // below this the rise is not worth calling running
+
+// Logged floats. These set the paddling speeds -- they are not decoration. Add a
+// trip and every float time in the app re-centres on it. Replay them against the
+// model with `npm run check` (see README) rather than in the UI; friends opening
+// this do not need to see the residuals.
+const MEASURED=[
+  {d:"2026-08-08",put:"nances",take:"home",launch:16.833,out:20.167,wet:false,
+   note:"easy pace, two short stops, water never caught us"}
+];
+
+// The still-water speed is DERIVED from the logged floats, not typed in. Add a trip
+// to MEASURED and the whole model re-centres on it.
+function calibratedStill(){
+  const dead=MEASURED.filter(m=>!m.wet);
+  if(!dead.length) return 1.9;
+  const sp=dead.map(m=>{
+    const put=PTS.find(p=>p.k===m.put), take=PTS.find(p=>p.k===m.take);
+    return (put.rm-take.rm)/(m.out-m.launch);});
+  return sp.reduce((a,b)=>a+b,0)/sp.length;
+}
+function calibratedRun(){
+  const wet=MEASURED.filter(m=>m.wet);
+  if(!wet.length) return null;               // nothing has tested this yet
+  const sp=wet.map(m=>{
+    const put=PTS.find(p=>p.k===m.put), take=PTS.find(p=>p.k===m.take);
+    return (put.rm-take.rm)/(m.out-m.launch);});
+  return sp.reduce((a,b)=>a+b,0)/sp.length;
+}
+
+// Observed + published, pulled 08/08/2026 22:00 EDT
+const TODAY=(()=>{const d=new Date(); d.setHours(0,0,0,0); return d;})();
+const SNAPSHOT_DATE="2026-08-08";   // when the embedded fallback was captured
+let FORECAST=[{d:"2026-08-08",inflow:3227,outflow:2408},
+                {d:"2026-08-09",inflow:2855,outflow:1315},
+                {d:"2026-08-10",inflow:3345,outflow:9500}];
+
+// WHAT ACTUALLY HAPPENED. Blocks derived from the observed hourly discharge feed,
+// where the value labelled hour H is the average over the hour ENDING at H (the
+// tailwater at 10:00 was already 1.78 ft off the zero-flow floor while the 10 AM
+// discharge row still read 93 cfs, so flow began just before 10:00, not after).
+//   [start, end, units]  local hours
+let OBSERVED_BLOCKS={
+  "2026-08-08":[[4,5,1],[10,16,1],[16,19,2],[19,21,1]]
+};
+// TVA's published next-day generation schedule. [start, end, unitsMin, unitsMax];
+// "2 or more" is (2,3) and only observed discharge can collapse it.
+let PUBLISHED_BLOCKS={
+  "2026-08-09":[[2,3,1,1],[8,9,1,1],[14,21,2,3]]
+};
+// Guide curve, day-of-year -> target elevation (TVA operating-guide)
+let GUIDE=[[1,1041.00],[46,1039.52],[60,1040.79],[91,1050.19],[105,1055.99],
+             [121,1062.51],[135,1068.02],[152,1070.57],[182,1069.06],[213,1069.00],
+             [244,1069.00],[258,1064.26],[274,1058.51],[289,1053.78],[366,1041.00]];
+const SEASON_INFLOW=[[213,3000],[244,2600],[274,2300],[289,2400],[320,2800]];
+
+/* ═══════════ MODEL ═══════════ */
+const cUpper=q=>q>0?C_REF.c*Math.pow(q/C_REF.q,C_EXP):0;
+const cLower=q=>{const u=cUpper(q); if(u<=0)return 0;
+  const f=Math.max(0,Math.min(1,(u-C_UP.slow)/(C_UP.fast-C_UP.slow)));
+  return C_LO.slow+f*(C_LO.fast-C_LO.slow);};
+function travelH(miles,q){ if(!q||q<1500||miles<=0)return miles<=0?0:null;
+  const up=Math.min(miles,BREAK), lo=Math.max(0,miles-BREAK);
+  const cu=cUpper(q); if(cu<=0)return null;
+  let h=up/cu; if(lo){const cl=cLower(q); if(cl<=0)return null; h+=lo/cl;} return h;}
+const milesBelow=rm=>DAM-rm;
+
+// Reservoir surface area (acres) fitted to TVA's own 08/10 forecast: a 0.44 ft drop
+// against 6,155 cfs of net outflow implies ~27,700 acres at elevation 1067.6.
+const areaAcres=h=>27700+351*(h-1067.6);
+const cfsPerFtDay=h=>areaAcres(h)*0.50417;
+const interp=(tbl,x)=>{for(let i=0;i<tbl.length-1;i++){const[a,av]=tbl[i],[b,bv]=tbl[i+1];
+  if(x>=a&&x<=b)return av+(bv-av)*(x-a)/(b-a);} return tbl[tbl.length-1][1];};
+const doy=d=>Math.floor((d-new Date(d.getFullYear(),0,0))/864e5);
+
+/* ─── sun (USNO low-precision solar position) ─── */
+function dayNum(d){return Date.UTC(d.getFullYear(),d.getMonth(),d.getDate())/864e5-10957.5;}
+function tzOff(d){ // hours WEST of UTC: EDT=4 (Mar 8 - Nov 1, 2026), else EST=5
+  const y=d.getFullYear(),st=new Date(y,2,8),en=new Date(y,10,1);
+  return (d>=st&&d<en)?4:5;}
+function sunTimes(date){
+  const rad=Math.PI/180, D=dayNum(date);
+  const g=(357.529+0.98560028*D)*rad;                 // mean anomaly
+  const q=280.459+0.98564736*D;                       // mean longitude, deg
+  const lam=(q+1.915*Math.sin(g)+0.020*Math.sin(2*g))*rad;   // ecliptic longitude
+  const eps=(23.439-0.00000036*D)*rad;                // obliquity
+  // Equation of time needs RIGHT ASCENSION, not ecliptic longitude -- they differ by
+  // up to ~2.5 deg, which is ten minutes of clock time.
+  let ra=Math.atan2(Math.cos(eps)*Math.sin(lam),Math.cos(lam))/rad;
+  let eqT=q-0.0057183-ra;
+  eqT=((eqT%360)+540)%360-180;                        // fold into [-180,180]
+  eqT*=4;                                             // degrees -> minutes
+  const dec=Math.asin(Math.sin(eps)*Math.sin(lam));
+  const ha=alt=>{const c=(Math.cos((90+alt)*rad)-Math.sin(LAT*rad)*Math.sin(dec))/
+      (Math.cos(LAT*rad)*Math.cos(dec));
+    return Math.abs(c)>1?null:Math.acos(c)/rad;};
+  const noon=12 - LON/15 - eqT/60 - tzOff(date);
+  const mk=alt=>{const H=ha(alt);return H===null?null:[noon-H/15,noon+H/15];};
+  const s=mk(0.833), tw=mk(6);
+  return {sunrise:s?s[0]:null,sunset:s?s[1]:null,dawn:tw?tw[0]:null,dusk:tw?tw[1]:null};
+}
+
+/* ─── generation schedule: observed > published > synthesised ─── */
+const isoOf=d=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+
+// A day's total generation budget, from TVA's published average outflow. Verified
+// on 08/08: forecast 2,408 cfs vs ~2,438 reconstructed from the hourly record.
+function budgetFor(date,avgCfs){return avgCfs*24;}
+
+// Trim a published schedule to what the forecast volume will actually fund.
+// 08/08 proved the schedule is intent, not a promise: it said "2 or more" from
+// 10 AM and the river ran one unit for most of that window.
+function reconcile(blocks,budget){
+  const fixed=blocks.filter(b=>b[2]===b[3]);
+  let spent=fixed.reduce((t,b)=>t+UNIT_CFS[b[2]]*(b[1]-b[0]),0);
+  return blocks.map(b=>{
+    if(b[2]===b[3]) return {s:b[0],e:b[1],u:b[2],src:"published"};
+    const hrs=b[1]-b[0], left=Math.max(0,budget-spent);
+    let u=b[2];
+    while(u>1 && UNIT_CFS[u]*hrs>left*1.15) u--;
+    spent+=UNIT_CFS[u]*hrs;
+    return {s:b[0],e:b[1],u,src:"published",trimmed:u<b[3]};
+  });
+}
+
+// Beyond the published horizon. The rule that matters on low-water days: TVA runs
+// the SMALLEST unit count that will move the day's volume, spread across a long
+// window -- not a short burst at high output. 08/08 was one unit for eleven hours,
+// not two units for six.
+function synthesise(date,avgCfs){
+  const dow=date.getDay(), weekend=(dow===0||dow===6);
+  const budget=budgetFor(date,avgCfs);
+  const pulses=[{s:2,e:3,u:1,src:"model"},{s:8,e:9,u:1,src:"model"}];
+  let gen=budget-2*UNIT_CFS[1];
+  if(gen<UNIT_CFS[1]) return {blocks:pulses.slice(0,1),src:"model",weekend};
+
+  const maxWindow=weekend?13:20;
+  let u=1, hours=gen/UNIT_CFS[1];
+  while(u<3 && hours>maxWindow){u++; hours=gen/UNIT_CFS[u];}
+  hours=Math.min(hours,23);
+
+  const warm=doy(date)<288;              // single afternoon peak until ~mid-October
+  const blocks=[];
+  if(warm){
+    let st=Math.max(5,Math.min(15.5-hours/2, 24-hours));
+    if(hours>=18) st=Math.max(5,15.5-hours/2);
+    blocks.push({s:st,e:st+hours,u,src:"model"});
+  } else {                                // cool: morning peak + evening peak
+    blocks.push({s:6.5,e:6.5+hours*0.4,u,src:"model"});
+    blocks.push({s:16,e:16+hours*0.6,u,src:"model"});
+  }
+  const keep=pulses.filter(pl=>!blocks.some(b=>pl.s>=b.s&&pl.s<b.e));
+  return {blocks:keep.concat(blocks),src:"model",weekend};
+}
+
+function scheduleFor(date,avgCfs){
+  const iso=isoOf(date);
+  if(OBSERVED_BLOCKS[iso]){
+    const blocks=OBSERVED_BLOCKS[iso].map(b=>({s:b[0],e:b[1],u:b[2],src:"observed"}));
+    return {blocks,src:"observed",weekend:[0,6].includes(date.getDay())};
+  }
+  if(PUBLISHED_BLOCKS[iso]){
+    const blocks=reconcile(PUBLISHED_BLOCKS[iso],budgetFor(date,avgCfs))
+                   .filter(b=>b.u>0);
+    return {blocks,src:"published",weekend:[0,6].includes(date.getDay())};
+  }
+  return synthesise(date,avgCfs);
+}
+
+const schedSummary=sch=>{
+  const gen=sch.blocks.filter(b=>b.u>0&&(b.e-b.s)>1.5);
+  if(!gen.length) return {hours:0,units:0,start:null};
+  const hours=gen.reduce((t,b)=>t+(b.e-b.s),0);
+  return {hours,units:Math.max(...gen.map(b=>b.u)),start:Math.min(...gen.map(b=>b.s))};
+};
+
+/* ─── is the water up at mile x, hour t -- and how much of it? ─── */
+const spreadH=x=>SPREAD_H_PER_MI*x;
+function effectiveCfs(q,durationH,x){
+  const sp=spreadH(x);
+  return q*durationH/(durationH+sp);
+}
+// Returns the EFFECTIVE discharge at that point and time, or 0.
+function waterOn(x,t,blocks){
+  let best=0;
+  for(const b of blocks){
+    const q=UNIT_CFS[b.u]; if(!q) continue;
+    const head=travelH(x,q); if(head===null) continue;
+    const D=b.e-b.s, sp=spreadH(x);
+    const eff=effectiveCfs(q,D,x);
+    if(eff<MIN_USABLE_CFS) continue;          // flattened out before it got here
+    if(t>=b.s+head && t<b.e+head+sp) best=Math.max(best,eff);
+  }
+  return best;
+}
+// Boat speed scales with how much rise actually reaches you. A marginal bump does
+// not push you along like a two-unit release does.
+function boatSpeed(eff,vRun,vStill){
+  if(!eff) return vStill;
+  return vStill+(vRun-vStill)*Math.min(1,eff/UNIT_CFS[2]);
+}
+
+/* ─── boat integrator ─── */
+function simulate(putRM,takeRM,launch,blocks,vRun,vStill){
+  let x=milesBelow(putRM); const goal=milesBelow(takeRM);
+  if(goal<=x) return null;
+  let t=launch; const dt=1/120, track=[[t,x]];
+  let caught=null, runMin=0, tot=0, dry=0;
+  // Only call it a catch-up if you actually launched onto dead water and the wave
+  // arrived later. Launching into water that is already up is a different thing.
+  const wetAtLaunch=!!waterOn(x,launch,blocks);
+  while(x<goal && t<launch+30){
+    const on=waterOn(x,t,blocks);
+    if(!on) dry=1;
+    if(on&&!caught&&!wetAtLaunch&&dry) caught=[t,x];
+    const v=boatSpeed(on,vRun,vStill);
+    x+=v*dt; t+=dt; tot+=dt; if(on)runMin+=dt;
+    track.push([t,x]);
+  }
+  return {arrive:t, dur:t-launch, track, caught, runFrac:tot?runMin/tot:0,
+          startedWet:wetAtLaunch};
+}
+
+/* ─── river geometry ─── */
+const RIVER=(()=>{
+  let la=RIVER_ORIGIN[0], lo=RIVER_ORIGIN[1];
+  const pts=[[la/1e4,lo/1e4]];
+  RIVER_DELTAS.split(";").forEach(seg=>{const[a,b]=seg.split(",").map(Number);
+    la+=a; lo+=b; pts.push([la/1e4,lo/1e4]);});
+  const Rm=3958.7613, t=Math.PI/180;
+  const hav=(p,q)=>{const d1=(q[0]-p[0])*t,d2=(q[1]-p[1])*t,
+    x=Math.sin(d1/2)**2+Math.cos(p[0]*t)*Math.cos(q[0]*t)*Math.sin(d2/2)**2;
+    return 2*Rm*Math.asin(Math.sqrt(x));};
+  const cum=[0];
+  for(let i=1;i<pts.length;i++) cum.push(cum[i-1]+hav(pts[i-1],pts[i]));
+  const total=cum[cum.length-1];
+  // rescale arc length onto TVA river miles so the two agree exactly at both ends
+  const mb=cum.map(c=>c*(DAM/total));            // miles below dam at each vertex
+  return {pts,mb,total,
+    at(milesBelow){
+      const m=Math.max(0,Math.min(DAM,milesBelow));
+      let i=mb.findIndex(v=>v>=m); if(i<1)i=1; if(i>=mb.length)i=mb.length-1;
+      const f=(m-mb[i-1])/((mb[i]-mb[i-1])||1);
+      return [pts[i-1][0]+(pts[i][0]-pts[i-1][0])*f,
+              pts[i-1][1]+(pts[i][1]-pts[i-1][1])*f];
+    }};
+})();
+
+/* ═══════════ LIVE DATA ═══════════ */
+// TVA's RestApi sends no CORS headers -- a browser fetch straight to tva.com fails
+// with "Failed to fetch". Everything TVA goes through the proxy in functions/.
+// NOAA NWPS and USGS do send CORS and could be called direct.
+const API=(window.HOLSTON_API||null);
+
+const tvaNum=v=>{ if(v==null)return null;
+  if(typeof v==="number")return v;
+  const t=String(v).trim().replace(/,/g,""); return t?parseFloat(t):null; };
+
+function tvaClock(label){            // "8 PM EDT" | "Midnight EDT" | "Noon EDT"
+  const parts=String(label).trim().split(/\s+/); parts.pop();          // drop EDT/EST
+  const t=parts.join(" ").toUpperCase();
+  if(t==="MIDNIGHT") return {h:0,mid:true};
+  if(t==="NOON")     return {h:12,mid:false};
+  const m=t.match(/^(\d{1,2})\s*(AM|PM)$/); if(!m) throw new Error("clock "+label);
+  let h=+m[1];
+  h = m[2]==="AM" ? (h===12?0:h) : (h===12?12:h+12);
+  return {h,mid:false};
+}
+const tvaDate=d=>{const[mm,dd,yy]=String(d).split("/").map(Number);return new Date(yy,mm-1,dd);};
+
+// Observed hourly discharge -> generation blocks.
+// Two traps: a standalone "Midnight" row carries the PREVIOUS day's date and must
+// roll forward, and the value labelled hour H is the average over the hour ENDING
+// at H (tailwater is already elevated at the top of the ramp hour).
+function parseObservedBlocks(rows){
+  const S=rows.map(r=>{
+    const {h,mid}=tvaClock(r.Time); const d=tvaDate(r.Day);
+    if(mid) d.setDate(d.getDate()+1);
+    d.setHours(h,0,0,0);
+    return {end:d, cfs:tvaNum(r.AverageHourlyDischarge)};
+  }).sort((a,b)=>a.end-b.end);
+  const out={}; let run=null;
+  const flush=()=>{ if(!run)return;
+    const day=new Date(run.start); day.setHours(0,0,0,0);
+    const k=isoOf(day);
+    (out[k]=out[k]||[]).push([(run.start-day)/36e5,(run.end-day)/36e5,run.u]);
+    run=null; };
+  for(const sm of S){
+    const u=classify_discharge_js(sm.cfs);
+    const st=new Date(sm.end); st.setHours(st.getHours()-1);
+    if(!u){ flush(); continue; }
+    if(run && run.u===u && +run.end===+st) run.end=sm.end;
+    else { flush(); run={start:st,end:sm.end,u}; }
+  }
+  flush(); return out;
+}
+function classify_discharge_js(cfs){
+  if(cfs==null) return null;
+  let best=null,gap=null;
+  for(const k in UNIT_CFS){ const u=+k, g=Math.abs(cfs-UNIT_CFS[u]);
+    if(g<=900 && (gap===null||g<gap)){best=u;gap=g;} }
+  return best||null;
+}
+
+// Forward schedule. Midnight resolves BY POSITION here -- a range ENDING at
+// midnight ends at 24:00 of its own labelled day. The observed roll-forward rule
+// must not leak in or every alert shifts a day.
+function parseScheduleBlocks(rows){
+  const out={};
+  rows.forEach(r=>{
+    const parts=String(r.Time).trim().split(/\s+/), tz=parts.pop();
+    const [aa,bb]=parts.join(" ").split("-").map(x=>x.trim());
+    const A=tvaClock(aa+" "+tz), B=tvaClock(bb+" "+tz);
+    const sH=A.h, eH=B.mid?24:B.h;
+    if(eH<=sH) return;
+    const g=String(r.Generators).trim().toLowerCase();
+    const m=g.match(/^(\d+)\s*or\s*more$/);
+    let lo,hi;
+    if(m){ lo=+m[1]; hi=Math.max(lo,3); }
+    else if(/^\d+$/.test(g)){ lo=hi=+g; }
+    else return;
+    if(!hi) return;
+    const k=isoOf(tvaDate(r.Day));
+    (out[k]=out[k]||[]).push([sH,eH,lo,hi]);
+  });
+  return out;
+}
+const parseForecastRows=rows=>rows.map(r=>({d:isoOf(tvaDate(r.Day)),
+  inflow:tvaNum(r.AverageInflow), outflow:tvaNum(r.AverageOutflow)}))
+  .filter(f=>f.outflow!=null);
+
+function parseGuideRows(payload){
+  const items=payload.items||payload; if(!Array.isArray(items)) return null;
+  const pts=items.map(it=>{const d=tvaDate(it.Day);
+      return [Math.floor((d-new Date(d.getFullYear(),0,0))/864e5), tvaNum(it.GuideCurve)];})
+    .filter(p=>p[1]>500).sort((a,b)=>a[0]-b[0]);
+  if(pts.length<20) return null;
+  const thin=pts.filter((p,i)=>i%6===0||i===pts.length-1);
+  if(thin[0][0]>1) thin.unshift([1,thin[0][1]]);
+  if(thin[thin.length-1][0]<366) thin.push([366,thin[thin.length-1][1]]);
+  return thin;
+}
+
+let DATA_STATE={live:false, at:null, fetchedAt:null, errors:[]};
+
+// Data comes from data/tva.json, refreshed by a scheduled GitHub Action. The app
+// makes ONE same-origin request for a static file -- no proxy, no server, nothing
+// that bills per request. (Set window.HOLSTON_API to use a live proxy instead.)
+async function hydrate(){
+  const errs=[];
+  try{
+    const url = API ? null : "./data/tva.json?t="+Date.now();
+    let d;
+    if(url){
+      const r=await fetch(url,{cache:"no-store"});
+      if(!r.ok) throw new Error("data/tva.json HTTP "+r.status);
+      d=await r.json();
+    } else {
+      const get=async ep=>{const r=await fetch(`${API}/${ep}/CRKT1`,{cache:"no-store"});
+        if(!r.ok) throw new Error(ep+" HTTP "+r.status); return r.json();};
+      const [o,sc,f,g]=await Promise.all([get("observed-data-48-hours"),
+        get("generation-releases"),get("predicted-data"),get("operating-guide")]);
+      d={fetchedAt:new Date().toISOString(),observed:o,schedule:sc,forecast:f,guide:g};
+    }
+    const use=(name,val,fn)=>{ if(!val){errs.push(name+": missing");return;}
+      try{ fn(val); }catch(e){ errs.push(name+": "+e.message); } };
+    use("observed",d.observed,v=>{const b=parseObservedBlocks(v);
+      if(Object.keys(b).length) OBSERVED_BLOCKS=b;});
+    use("schedule",d.schedule,v=>{const b=parseScheduleBlocks(v);
+      if(Object.keys(b).length) PUBLISHED_BLOCKS=b;});
+    use("forecast",d.forecast,v=>{const f=parseForecastRows(v); if(f.length) FORECAST=f;});
+    use("guide",d.guide,v=>{const g=parseGuideRows(v); if(g) GUIDE=g;});
+
+    DATA_STATE={live:errs.length<4, at:new Date(),
+                fetchedAt:d.fetchedAt?new Date(d.fetchedAt):null, errors:errs};
+  }catch(e){
+    DATA_STATE={live:false, at:new Date(), fetchedAt:null, errors:[String(e.message||e)]};
+  }
+  paintFreshness();
+  if(DATA_STATE.live){ render(); drawOutlook(); drawSeason(); drawMap(); drawLegs(); drawTT(); }
+}
+
+function paintFreshness(){
+  const el=document.getElementById("fresh"); if(!el) return;
+  const s=DATA_STATE;
+  if(!s.live){
+    el.className="badge warn";
+    el.innerHTML=`<i></i>Offline · showing ${SNAPSHOT_DATE} snapshot`;
+    el.title=s.errors.join("\n")||"Could not load river data";
+    return;
+  }
+  // Show when TVA was actually read, not when the browser loaded the file --
+  // the file can be up to half an hour old and pretending otherwise is a lie.
+  const when=s.fetchedAt||s.at;
+  const mins=Math.round((Date.now()-when)/60000);
+  const t=when.toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit"});
+  const stale=mins>90;
+  el.className="badge "+(stale||s.errors.length?"warn":"ok");
+  el.innerHTML=`<i></i>`+(mins<2?"Updated just now":`Updated ${t}`)+
+    (stale?` · ${Math.floor(mins/60)}h old`:"")+
+    (s.errors.length?` · ${s.errors.length} feed(s) stale`:"");
+  el.title=(s.errors.join("\n")||"River data read from TVA at "+when.toLocaleString());
+}
+
+/* ═══════════ UI ═══════════ */
+const NS="http://www.w3.org/2000/svg";
+function defs(svg,id){
+  const d=document.createElementNS(NS,"defs");
+  const mk=(gid,c,a1,a2)=>{const g=document.createElementNS(NS,"linearGradient");
+    g.setAttribute("id",gid); g.setAttribute("x1","0");g.setAttribute("y1","0");
+    g.setAttribute("x2","0");g.setAttribute("y2","1");
+    [[0,a1],[1,a2]].forEach(([o,op])=>{const st=document.createElementNS(NS,"stop");
+      st.setAttribute("offset",o);st.setAttribute("stop-color",c);
+      st.setAttribute("stop-opacity",op);g.appendChild(st);});
+    d.appendChild(g);};
+  mk(id+"-g1","var(--series-1)",.30,.02);
+  mk(id+"-g2","var(--series-2)",.26,.01);
+  svg.appendChild(d);
+}
+const el=(n,a)=>{const e=document.createElementNS(NS,n);for(const k in a)e.setAttribute(k,a[k]);return e;};
+const TH=(p,x,y,str,o)=>{o=o||{};
+  const e=el("text",{x,y,"font-size":o.size||11.5,fill:o.fill||"var(--text-primary)",
+    "text-anchor":o.anchor||"start","font-weight":o.weight||500,
+    stroke:"var(--surface-1)","stroke-width":o.halo||3.4,"stroke-linejoin":"round",
+    "paint-order":"stroke fill"});
+  e.textContent=str; p.appendChild(e); return e;};
+const T=(p,x,y,s,o)=>{o=o||{};const e=el("text",{x,y,"font-size":o.size||11.5,
+  fill:o.fill||"var(--text-muted)","text-anchor":o.anchor||"start","font-weight":o.weight||400});
+  e.textContent=s;p.appendChild(e);return e;};
+const clock=h=>{if(h==null)return"—";h=((h%24)+24)%24;let H=Math.floor(h),m=Math.round((h-H)*60);
+  if(m===60){m=0;H=(H+1)%24;}const ap=H<12?"AM":"PM";let hh=H%12;if(hh===0)hh=12;
+  return hh+":"+String(m).padStart(2,"0")+" "+ap;};
+const dur=h=>{if(h==null)return"\u2014";let t=Math.round(h*60);const H=Math.floor(t/60);
+  return (H?H+"h ":"")+(t-H*60)+"m";};
+
+const SRC_LABEL={observed:"observed record",published:"TVA published schedule",model:"modelled from guide curve"};
+const $=id=>document.getElementById(id);
+const TIP=()=>document.getElementById("tip");
+function hoverTip(node,title,rows){
+  node.style.cursor="crosshair";
+  node.addEventListener("mousemove",e=>{const t=TIP(); if(!t)return;
+    t.innerHTML=`<div class="tt">${title}</div>`+rows.map(r=>`<div class="tr">${r}</div>`).join("");
+    t.classList.add("on");
+    const w=t.offsetWidth||190, h=t.offsetHeight||60;
+    t.style.left=Math.min(window.innerWidth-w-12,e.clientX+16)+"px";
+    t.style.top=Math.max(10,e.clientY-h-14)+"px";});
+  node.addEventListener("mouseleave",()=>{const t=TIP(); if(t)t.classList.remove("on");});
+}
+const BACK=4;   // a few days of hindsight -- useful for checking a float you just did
+const days=[]; for(let i=-BACK;i<70;i++){const d=new Date(TODAY);d.setDate(d.getDate()+i);days.push(d);}
+const TODAY_IDX=BACK;
+const fmtD=d=>d.toLocaleDateString("en-US",{weekday:"short",month:"short",day:"numeric"});
+
+PTS.forEach((p,i)=>{
+  $("putin").appendChild(new Option(p.n+"  ·  RM "+p.rm.toFixed(2),i));
+  $("takeout").appendChild(new Option(p.n+"  ·  RM "+p.rm.toFixed(2),i));});
+days.forEach((d,i)=>$("day").appendChild(new Option(
+  fmtD(d)+(i===TODAY_IDX?"  ·  today":i<TODAY_IDX?"  ·  past":""),i)));
+$("putin").value=2; $("takeout").value=3; $("day").value=TODAY_IDX; $("launch").value=15;
+$("vstill").value=calibratedStill().toFixed(2);
+if(calibratedRun()) $("vrun").value=calibratedRun().toFixed(2);
+
+/* ─── outflow prediction for a date ─── */
+function predictOutflow(date){
+  const iso=isoOf(date);
+  const f=FORECAST.find(x=>x.d===iso);
+  if(f) return {cfs:f.outflow, src:"TVA forecast", conf:"high"};
+  const n=doy(date), h=interp(GUIDE,n);
+  const dH=(interp(GUIDE,n+3)-interp(GUIDE,n-3))/6;      // ft/day, centred
+  const inflow=interp(SEASON_INFLOW,n);
+  let cfs=Math.max(400, inflow - dH*cfsPerFtDay(h));
+  const dow=date.getDay();
+  cfs*= (dow===0||dow===6)?0.72:1.12;                     // weekday power demand runs higher than weekend
+  const ahead=Math.abs(date-TODAY)/864e5;
+  return {cfs:Math.round(cfs), src:"guide curve", conf: ahead<10?"medium":"low", elev:h};
+}
+
+/* ─── main render ─── */
+function render(){
+  const di=+$("day").value, date=days[di];
+  const pi=+$("putin").value, ti=+$("takeout").value;
+  const launch=+$("launch").value, vRun=+$("vrun").value, vStill=+$("vstill").value;
+  $("lt").textContent="· "+clock(launch);
+  const sun=sunTimes(date), pred=predictOutflow(date), sch=scheduleFor(date,pred.cfs);
+  const put=PTS[pi], take=PTS[ti];
+  const sim=(ti>pi)?simulate(put.rm,take.rm,launch,sch.blocks,vRun,vStill):null;
+
+  /* verdict */
+  const V=$("verdict"); V.innerHTML="";
+  const box=(lab,val,note,color,big)=>{
+    const d=document.createElement("div"); d.className="vbox"+(big?" big":"");
+    d.style.setProperty("--accent",color);
+    d.innerHTML=`<div class="vl">${lab}</div><div class="vv">${val}</div>
+      <div class="vn">${note}</div>`;
+    V.appendChild(d);};
+  if(!sim){ box("Invalid","—","Take-out must be downstream of put-in","var(--critical)"); }
+  else{
+    const margin=sun.sunset-sim.arrive;
+    const v = margin>=0.75 ? ["GO","var(--good)"] : margin>=0 ? ["TIGHT","var(--warning)"] : ["NO","var(--critical)"];
+    box(v[0], clock(sim.arrive), (margin>=0?dur(margin)+" of daylight left":dur(-margin)+" past sunset")+
+        " · sunset "+clock(sun.sunset), v[1], true);
+    box("Float time", dur(sim.dur),
+        Math.round(sim.runFrac*100)+"% of it on moving water", "var(--series-3)");
+    const wl = sim.startedWet ? ["Water's up","Running at launch",
+          Math.round(sim.runFrac*100)+"% of the float stays wet"]
+      : sim.caught ? ["Wave catches you",clock(sim.caught[0]),
+          "at RM "+(DAM-sim.caught[1]).toFixed(1)+", "+
+          (DAM-sim.caught[1]-take.rm).toFixed(1)+" mi from take-out"]
+      : ["Dead water","none","you paddle the whole thing"];
+    box(wl[0],wl[1],wl[2],"var(--series-1)");
+  }
+
+  /* stats */
+  const _pm=milesBelow(put.rm);
+  const firstUse=sch.blocks.filter(b=>b.u>0 &&
+      effectiveCfs(UNIT_CFS[b.u],b.e-b.s,_pm)>=MIN_USABLE_CFS)
+    .sort((a,c)=>a.s-c.s)[0];
+  const head=firstUse?travelH(_pm,UNIT_CFS[firstUse.u]):null;
+  const S=$("stats"); S.innerHTML="";
+  const st=(l,v,n)=>{const d=document.createElement("div");d.className="st";
+    d.innerHTML=`<div class="l">${l}</div><div class="v">${v}</div><div class="n">${n||""}</div>`;
+    S.appendChild(d);};
+  st("Predicted outflow", pred.cfs.toLocaleString()+" cfs", pred.src+" · "+pred.conf+" confidence");
+  const sm=schedSummary(sch);
+  const us=[...new Set(sch.blocks.filter(b=>b.u>0&&(b.e-b.s)>1.5).map(b=>b.u))].sort();
+  st("Generation", sm.hours?dur(sm.hours)+" @ "+(us.length>1?us[0]+"–"+us[us.length-1]:us[0]||1)+"u":"minimum flows",
+     sm.start!=null?("from "+clock(sm.start)+" · "+SRC_LABEL[sch.src]):SRC_LABEL[sch.src]);
+  st("Usable water at "+put.n.split(" ")[0], head?clock(firstUse.s+head):"never",
+     head?("~"+Math.round(effectiveCfs(UNIT_CFS[firstUse.u],firstUse.e-firstUse.s,_pm)).toLocaleString()
+           +" cfs after "+dur(head))
+         :"every release flattens out before it gets here");
+  st("Distance", (put.rm-take.rm).toFixed(2)+" mi", put.n+" → "+take.n);
+  st("Daylight", clock(sun.sunrise)+" – "+clock(sun.sunset), "dusk "+clock(sun.dusk));
+
+  drawTrip(sim,sch,sun,launch,put,take,date);
+  drawScan(date,pi,ti,sch,sun,vRun,vStill);
+  $("tripnote").innerHTML = sim ? tripNote(sim,sch,sun,put,take) : "";
+}
+
+function tripNote(sim,sch,sun,put,take){
+  const m=sun.sunset-sim.arrive;
+  let s="";
+  if(sim.caught){
+    const rm=(DAM-sim.caught[1]).toFixed(1);
+    s+=`The wave overtakes you at <strong>RM ${rm}</strong> around <strong>${clock(sim.caught[0])}</strong>, `+
+       `and you ride it the rest of the way — that is why the float comes in at ${dur(sim.dur)} `+
+       `instead of the ${dur((put.rm-take.rm)/(+$("vstill").value))} it would take on dead water. `;
+  } else if(sim.startedWet){
+    const still=(put.rm-take.rm)/(+$("vstill").value);
+    s+=`The release reached ${put.n} before you got there, so you launch straight onto moving water `+
+       `and cover it in ${dur(sim.dur)} instead of ${dur(still)}. `;
+  } else {
+    s+=`The wave never reaches you — you paddle all ${(put.rm-take.rm).toFixed(1)} miles on still water. `;
+  }
+  s+= m>=0.75 ? `You take out with ${dur(m)} of daylight to spare.`
+     : m>=0 ? `<strong>Tight.</strong> You land ${dur(m)} before sunset — no margin for a long lunch.`
+     : `<strong>You finish ${dur(-m)} after sunset.</strong> Launch earlier or shorten the reach.`;
+  return s;
+}
+
+/* ─── trip chart: distance-time ─── */
+function drawTrip(sim,sch,sun,launch,put,take,date){
+  const s=$("trip"); s.innerHTML=""; defs(s,"trip");
+  const L=112,R=20,Tp=14,B=30,W=1000,H=340;
+  let tailEnd=launch+8;
+  sch.blocks.forEach(b=>{const th=travelH(milesBelow(take.rm),UNIT_CFS[1]);
+    if(th!=null)tailEnd=Math.max(tailEnd,b.e+th+0.5);});
+  const t0=Math.max(0,Math.min(launch-1.5, sun.sunrise-0.5)),
+        t1=Math.min(Math.max(tailEnd,sun.dusk+0.6), launch+12);
+  const x0=milesBelow(put.rm)-1, x1=milesBelow(take.rm)+1;
+  const X=t=>L+(t-t0)/(t1-t0)*(W-L-R), Y=x=>Tp+(x-x0)/(x1-x0)*(H-Tp-B);
+
+  s.appendChild(el("rect",{x:L,y:Tp,width:W-L-R,height:H-Tp-B,rx:8,
+    fill:"var(--surface-2)","fill-opacity":.55}));
+  // night shading -- a tint, not a block
+  if(sun.sunset<t1) s.appendChild(el("rect",{x:X(Math.max(sun.sunset,t0)),y:Tp,
+    width:Math.max(0,X(t1)-X(Math.max(sun.sunset,t0))),height:H-Tp-B,
+    fill:"var(--night)","fill-opacity":.055}));
+  if(sun.sunrise>t0) s.appendChild(el("rect",{x:L,y:Tp,width:Math.max(0,X(sun.sunrise)-L),
+    height:H-Tp-B,fill:"var(--night)","fill-opacity":.055}));
+  [[sun.sunrise,"sunrise"],[sun.sunset,"sunset"]].forEach(([h,lab])=>{
+    if(h>t0&&h<t1){s.appendChild(el("line",{x1:X(h),x2:X(h),y1:Tp,y2:H-B,
+      stroke:"var(--night)","stroke-width":1.5,"stroke-dasharray":"4 3"}));
+      T(s,X(h)+5,Tp+12,lab+" "+clock(h),{fill:"var(--night)",weight:600});}});
+
+  // access-point gridlines
+  PTS.forEach(p=>{const x=milesBelow(p.rm); if(x<x0||x>x1)return;
+    s.appendChild(el("line",{x1:L,x2:W-R,y1:Y(x),y2:Y(x),stroke:"var(--rule)",
+      "stroke-width":1,"stroke-dasharray":"3 3"}));
+    T(s,L-8,Y(x)+4,p.n.replace(" ≈",""),{anchor:"end",size:10.5});});
+
+  // hour ticks
+  for(let h=Math.ceil(t0);h<=t1;h++){ if(h%2)continue;
+    s.appendChild(el("line",{x1:X(h),x2:X(h),y1:Tp,y2:H-B,stroke:"var(--rule)",
+      "stroke-width":1,"stroke-opacity":.55}));
+    T(s,X(h),H-B+17,clock(h).replace(":00",""),{anchor:"middle",size:10.5});}
+
+  // wave head + tail for each block
+  sch.blocks.forEach(b=>{const q=UNIT_CFS[b.u]; if(!q)return;
+    const pts=(off,fn)=>{const a=[];for(let x=Math.max(x0,0);x<=x1;x+=0.5){
+      const h=fn(x); if(h==null)continue; a.push([X(off+h),Y(x)]);} return a;};
+    const D=b.e-b.s;
+    if(effectiveCfs(q,D,milesBelow(take.rm))<MIN_USABLE_CFS &&
+       effectiveCfs(q,D,milesBelow(put.rm))<MIN_USABLE_CFS) return;
+    const head=pts(b.s,x=>travelH(x,q)),
+          tail=pts(b.e,x=>{const h=travelH(x,q);return h===null?null:h+spreadH(x);});
+    if(head.length>1&&tail.length>1){
+      const poly=head.concat(tail.slice().reverse());
+      const pg=el("polygon",{points:poly.map(p=>p.join(",")).join(" "),fill:"url(#trip-g1)"});
+      hoverTip(pg,"Water is up here",
+        ["Everything inside this band has moving water",
+         b.u+" unit"+(b.u>1?"s":"")+" · "+UNIT_CFS[b.u].toLocaleString()+" cfs",
+         "released "+clock(b.s)+" – "+clock(b.e)+" at the dam"]);
+      s.appendChild(pg);}
+    [[head,"var(--series-1)","Water arrives"],[tail,"var(--series-2)","Water drops"]]
+      .forEach(([a,c,lab])=>{
+      if(a.length<2)return;
+      const ln=el("polyline",{points:a.map(p=>p.join(",")).join(" "),fill:"none",stroke:c,
+        "stroke-width":2.5,"stroke-linecap":"round","stroke-linejoin":"round"});
+      hoverTip(ln,lab,["Leading edge of the "+b.u+"-unit release",
+        "moves "+cUpper(q).toFixed(2)+" mph upper reach, "+cLower(q).toFixed(2)+" mph below RM 27",
+        "arrives as ~"+Math.round(effectiveCfs(q,b.e-b.s,milesBelow(take.rm))).toLocaleString()+" cfs at the take-out"]);
+      s.appendChild(ln);});
+  });
+
+  // boat
+  if(sim){ const tr=sim.track.filter(p=>p[0]<=t1);
+    const pathPts=tr.map(p=>X(p[0])+","+Y(p[1])).join(" ");
+    s.appendChild(el("polyline",{points:pathPts,fill:"none",stroke:"var(--series-3)",
+      "stroke-width":11,"stroke-opacity":.16,"stroke-linecap":"round","stroke-linejoin":"round"}));
+    const bl=el("polyline",{points:pathPts,fill:"none",stroke:"var(--series-3)",
+      "stroke-width":4,"stroke-linecap":"round","stroke-linejoin":"round"});
+    hoverTip(bl,"Your boat",["Launch "+clock(launch)+" · out "+clock(sim.arrive),
+      dur(sim.dur)+" total, "+Math.round(sim.runFrac*100)+"% on moving water"]);
+    s.appendChild(bl);
+    const near = sim.caught && Math.abs(sim.caught[0]-launch)<0.6;
+    [[tr[0],"launch "+clock(launch),0],[tr[tr.length-1],"out "+clock(sim.arrive),1]]
+      .forEach(([p,lab,i])=>{
+      s.appendChild(el("circle",{cx:X(p[0]),cy:Y(p[1]),r:5,fill:"var(--series-3)",
+        stroke:"var(--surface-1)","stroke-width":2}));
+      T(s,X(p[0])+(i?-10:10),Y(p[1])+(i?-11:(near?20:-10)),lab,
+        {fill:"var(--series-3)",weight:600,anchor:i?"end":"start"});});
+    if(sim.caught){ s.appendChild(el("circle",{cx:X(sim.caught[0]),cy:Y(sim.caught[1]),r:8,
+      fill:"none",stroke:"var(--series-1)","stroke-width":2.5}));
+      T(s,X(sim.caught[0])+13,Y(sim.caught[1])-9,"water catches you",
+        {fill:"var(--text-secondary)",weight:600});}}
+  s.appendChild(el("line",{x1:L,x2:W-R,y1:H-B,y2:H-B,stroke:"var(--rule)"}));
+}
+
+/* ─── launch scanner ─── */
+function drawScan(date,pi,ti,sch,sun,vRun,vStill){
+  const s=$("scan"); s.innerHTML="";
+  const L=128,R=20,Tp=26,B=26,W=1000,H=186;
+  if(ti<=pi){T(s,L,70,"Take-out must be downstream of put-in.");return;}
+  const put=PTS[pi],take=PTS[ti];
+  const t0=Math.floor(sun.sunrise-1), t1=Math.ceil(sun.sunset+0.5);
+  const X=t=>L+(t-t0)/(t1-t0)*(W-L-R);
+  const step=1/6, bw=(W-L-R)/((t1-t0)/step)+0.6;
+  const rows=[];
+  for(let t=t0;t<=t1;t+=step){
+    const sim=simulate(put.rm,take.rm,t,sch.blocks,vRun,vStill);
+    if(!sim)continue;
+    const m=sun.sunset-sim.arrive;
+    rows.push({t,sim,m,cls:m>=0.75?"good":m>=0?"warning":"critical"});
+  }
+  const BH=32;
+  // band 1 -- can you finish in daylight
+  T(s,L-10,Tp+20,"Finish in daylight",{anchor:"end",size:11,weight:600});
+  rows.forEach(r=>{const rc=el("rect",{x:X(r.t),y:Tp,width:bw,height:BH,
+    fill:"var(--"+r.cls+")","fill-opacity":.9});
+    hoverTip(rc,"Launch "+clock(r.t),
+      ["Take out "+clock(r.sim.arrive)+" · "+dur(r.sim.dur),
+       Math.round(r.sim.runFrac*100)+"% on moving water",
+       (r.m>=0?dur(r.m)+" of daylight left":dur(-r.m)+" after dark")]);
+    s.appendChild(rc);});
+  // band 2 -- how much of the float is on moving water
+  const Y2=Tp+BH+18;
+  T(s,L-10,Y2+20,"On moving water",{anchor:"end",size:11,weight:600});
+  s.appendChild(el("rect",{x:L,y:Y2,width:W-L-R,height:BH,fill:"var(--surface-2)"}));
+  rows.forEach(r=>{const h=BH*r.sim.runFrac; if(h<0.5)return;
+    s.appendChild(el("rect",{x:X(r.t),y:Y2+BH-h,width:bw,height:h,fill:"var(--series-1)"}));});
+  const anyWater=rows.some(r=>r.sim.runFrac>0.02);
+  if(!anyWater) T(s,(L+W-R)/2,Y2+21,"no moving water at any launch time today",
+    {anchor:"middle",size:12,fill:"var(--text-muted)",weight:600});
+  // band 3 -- take-out clock
+  const Y3=Y2+BH+16;
+  T(s,L-10,Y3+12,"Take out at",{anchor:"end",size:11,weight:600});
+  T(s,L-10,H-B+20,"Launch at",{anchor:"end",size:11,weight:600});
+  rows.forEach((r,i)=>{if(i%12||i===0)return;
+    T(s,X(r.t),Y3+12,clock(r.sim.arrive).replace(":00",""),
+      {anchor:"middle",size:10,fill:"var(--text-secondary)"});});
+  // axis
+  for(let h=Math.ceil(t0);h<=t1;h++){ if(h%2)continue;
+    s.appendChild(el("line",{x1:X(h),x2:X(h),y1:Tp,y2:Tp+BH,stroke:"var(--surface-1)",
+      "stroke-width":1,"stroke-opacity":.45}));
+    T(s,X(h),H-B+20,clock(h).replace(":00",""),{anchor:"middle",size:10.5});}
+  // pick
+  const gos=rows.filter(r=>r.cls==="good");
+  let best=null;
+  if(gos.length) best = anyWater
+      ? gos.reduce((a,c)=>c.sim.runFrac>a.sim.runFrac?c:a)
+      : gos[Math.floor(gos.length/2)];
+  if(best){
+    s.appendChild(el("line",{x1:X(best.t),x2:X(best.t),y1:Tp-8,y2:Y2+BH,
+      stroke:"var(--text-primary)","stroke-width":2}));
+    T(s,Math.min(X(best.t),W-R-70),Tp-13,"pick "+clock(best.t),
+      {anchor:"middle",fill:"var(--text-primary)",weight:700,size:12});}
+  $("scannote").innerHTML = !gos.length
+    ? `<strong>Nothing works on this date for this reach</strong> — every launch time puts you on the water after dark. Shorten the reach or pick another day.`
+    : anyWater
+      ? `Daylight-safe launches run <strong>${clock(gos[0].t)}</strong> to <strong>${clock(gos[gos.length-1].t)}</strong>. `+
+        `The pick is <strong>${clock(best.t)}</strong> — ${Math.round(best.sim.runFrac*100)}% of that float rides moving water, out at ${clock(best.sim.arrive)}.`
+      : `You can finish in daylight launching anywhere from <strong>${clock(gos[0].t)}</strong> to <strong>${clock(gos[gos.length-1].t)}</strong>, `+
+        `but <strong>the river is dead all day on this reach</strong> — the release does not get here before dark, so it is a ${dur(best.sim.dur)} paddle either way. `+
+        `Check the outlook below for a day with water.`;
+}
+
+/* ─── ten-week outlook ─── */
+function drawOutlook(){
+  const s=$("outlook"); s.innerHTML="";
+  const L=54,R=18,Tp=16,B=44,W=1000,H=300;
+  const data=days.map(d=>({d,p:predictOutflow(d)}));
+  const max=Math.max(...data.map(x=>x.p.cfs))*1.08;
+  const X=i=>L+i/(data.length-1)*(W-L-R), Y=v=>Tp+(1-v/max)*(H-Tp-B);
+  const bw=(W-L-R)/data.length*0.78;
+  [0,2500,5000,7500,10000].forEach(v=>{ if(v>max)return;
+    s.appendChild(el("line",{x1:L,x2:W-R,y1:Y(v),y2:Y(v),stroke:"var(--rule)"}));
+    T(s,L-8,Y(v)+4,v?(v/1000)+"k":"0",{anchor:"end",size:10.5});});
+  data.forEach((x,i)=>{
+    const op = x.p.conf==="high"?1 : x.p.conf==="medium"?.62 : .34;
+    const r=el("rect",{x:X(i)-bw/2,y:Y(x.p.cfs),width:bw,height:Math.max(2,H-B-Y(x.p.cfs)),
+      fill:"var(--series-1)","fill-opacity":op,rx:Math.min(4,bw/2)});
+    const hrs=x.p.cfs*24/UNIT_CFS[3];
+    hoverTip(r,x.d.toLocaleDateString("en-US",{weekday:"long",month:"short",day:"numeric"}),
+      [x.p.cfs.toLocaleString()+" cfs average outflow",
+       "≈ "+dur(hrs)+" of 3-unit generation",
+       x.p.src+" · "+x.p.conf+" confidence"]);
+    s.appendChild(r);
+    if(x.d.getDate()===1||i===0){
+      s.appendChild(el("line",{x1:X(i)-bw/2-2,x2:X(i)-bw/2-2,y1:Tp,y2:H-B,
+        stroke:"var(--text-muted)","stroke-width":1}));
+      T(s,X(i)+2,Tp+11,x.d.toLocaleDateString("en-US",{month:"long"}),
+        {fill:"var(--text-secondary)",weight:600});}
+    if(i%7===0)T(s,X(i),H-B+16,x.d.toLocaleDateString("en-US",{month:"numeric",day:"numeric"}),
+      {anchor:"middle",size:10});});
+  // annotate the drawdown ramp
+  const sep=data.findIndex(x=>x.d.getMonth()===8);
+  if(sep>0){ T(s,X(sep)+6,H-B+34,"drawdown begins — generation roughly doubles",
+    {fill:"var(--series-2)",weight:600,size:12});
+    s.appendChild(el("line",{x1:X(sep),x2:X(sep),y1:Tp,y2:H-B+22,
+      stroke:"var(--series-2)","stroke-width":2,"stroke-dasharray":"5 3"}));}
+  s.appendChild(el("line",{x1:L,x2:W-R,y1:H-B,y2:H-B,stroke:"var(--rule)"}));
+  const augAvg=avg(data.filter(x=>x.d.getMonth()===7).map(x=>x.p.cfs));
+  const sepAvg=avg(data.filter(x=>x.d.getMonth()===8).map(x=>x.p.cfs));
+  $("outnote").innerHTML=`Bar opacity is confidence: solid for TVA's published three-day forecast, `+
+    `fading as the guide curve takes over. August averages <strong>${Math.round(augAvg).toLocaleString()} cfs</strong>; `+
+    `September averages <strong>${Math.round(sepAvg).toLocaleString()} cfs</strong> — the seasonal drawdown from `+
+    `1069 ft down toward 1054 by mid-October has to move roughly 4,700 cfs of extra water every day, `+
+    `on top of inflow. That is the difference between a river that runs six hours and one that runs most of the day. `+
+    `<strong>September floats better than August by a wide margin.</strong>`;
+}
+const avg=a=>a.reduce((x,y)=>x+y,0)/(a.length||1);
+
+/* ─── seasonal chart: two stacked panels sharing one x axis (never a dual axis) ─── */
+function drawSeason(){
+  const s=$("season"); s.innerHTML=""; defs(s,"seas");
+  const L=46,R=16,W=520,H=300;
+  const X=n=>L+(n-1)/364*(W-L-R);
+  const P1={t:16,h:112}, P2={t:168,h:96};
+  const curve=[]; for(let n=1;n<=365;n+=1)curve.push([n,interp(GUIDE,n)]);
+  const e0=1035,e1=1074, Y1=e=>P1.t+(e1-e)/(e1-e0)*P1.h;
+  [1040,1050,1060,1070].forEach(e=>{
+    s.appendChild(el("line",{x1:L,x2:W-R,y1:Y1(e),y2:Y1(e),stroke:"var(--rule)"}));
+    T(s,L-6,Y1(e)+3.5,e,{anchor:"end",size:9.5});});
+  s.appendChild(el("polyline",{points:curve.map(c=>X(c[0])+","+Y1(c[1])).join(" "),
+    fill:"none",stroke:"var(--series-1)","stroke-width":2.5}));
+  T(s,L,P1.t-4,"Guide curve — pool elevation (ft)",{size:11,weight:600,fill:"var(--series-1)"});
+
+  // implied outflow, smoothed over a 15-day window so the piecewise guide table
+  // does not manufacture step changes that aren't in the real curve
+  const out=[];
+  for(let n=1;n<=365;n++){
+    const h=interp(GUIDE,n);
+    const dH=(interp(GUIDE,Math.min(365,n+11))-interp(GUIDE,Math.max(1,n-11)))/22;
+    out.push([n, Math.max(300, interp(SEASON_INFLOW,n)-dH*cfsPerFtDay(h))]);}
+  const q1=11000, Y2=q=>P2.t+(1-Math.min(q,q1)/q1)*P2.h;
+  [0,4000,8000].forEach(q=>{
+    s.appendChild(el("line",{x1:L,x2:W-R,y1:Y2(q),y2:Y2(q),stroke:"var(--rule)"}));
+    T(s,L-6,Y2(q)+3.5,q?(q/1000)+"k":"0",{anchor:"end",size:9.5});});
+  s.appendChild(el("polygon",{points:out.map(o=>X(o[0])+","+Y2(o[1])).join(" ")+
+    " "+X(365)+","+Y2(0)+" "+X(1)+","+Y2(0),fill:"url(#seas-g2)"}));
+  s.appendChild(el("polyline",{points:out.map(o=>X(o[0])+","+Y2(o[1])).join(" "),
+    fill:"none",stroke:"var(--series-2)","stroke-width":2.5}));
+  T(s,L,P2.t-4,"Outflow it implies (cfs/day)",{size:11,weight:600,fill:"var(--series-2)"});
+
+  ["J","F","M","A","M","J","J","A","S","O","N","D"].forEach((m,i)=>
+    T(s,X(i*30.4+15),H-8,m,{anchor:"middle",size:10.5}));
+  const now=doy(TODAY);
+  s.appendChild(el("line",{x1:X(now),x2:X(now),y1:P1.t,y2:P2.t+P2.h,
+    stroke:"var(--text-primary)","stroke-width":1.5,"stroke-dasharray":"4 3"}));
+  T(s,X(now)-5,P1.t+10,"now",{anchor:"end",fill:"var(--text-primary)",weight:700,size:10.5});
+  s.appendChild(el("line",{x1:L,x2:W-R,y1:P2.t+P2.h,y2:P2.t+P2.h,stroke:"var(--rule)"}));
+  const sep=out.find(o=>o[0]===250)[1], aug=out.find(o=>o[0]===222)[1];
+  $("seasnote").innerHTML=`Pool holds flat through August, so outflow only has to match inflow — `+
+    `about <strong>${Math.round(aug/100)*100} cfs</strong>. Once the drawdown starts in September `+
+    `TVA has to move roughly <strong>${Math.round(sep/100)*100} cfs</strong> a day to hit the curve. `+
+    `That is the whole reason fall floats better than late summer.`;
+}
+
+/* ─── the map ─── */
+function drawMap(){
+  const s=$("map"); s.innerHTML=""; defs(s,"map");
+  const W=1000,H=780,M=34;
+  const lat=RIVER.pts.map(p=>p[0]), lon=RIVER.pts.map(p=>p[1]);
+  const la0=Math.min(...lat),la1=Math.max(...lat),lo0=Math.min(...lon),lo1=Math.max(...lon);
+  const kx=Math.cos(((la0+la1)/2)*Math.PI/180);
+  const spanX=(lo1-lo0)*kx, spanY=(la1-la0);
+  const sc=Math.min((W-2*M-110)/spanX,(H-2*M)/spanY);
+  const ox=M+55+((W-2*M-110)-spanX*sc)/2, oy=M+((H-2*M)-spanY*sc)/2;
+  const X=p=>ox+(p[1]-lo0)*kx*sc, Y=p=>oy+(la1-p[0])*sc;
+
+  const di=+$("day").value, date=days[di];
+  const pred=predictOutflow(date), sch=scheduleFor(date,pred.cfs);
+  const t=+$("mapTime").value;
+  const pi=+$("putin").value, ti=+$("takeout").value;
+  const put=PTS[pi], take=PTS[ti];
+  $("mtLab").textContent="· "+(t>=24?"next day ":"")+clock(t);
+
+  // casing
+  s.appendChild(el("polyline",{points:RIVER.pts.map(p=>X(p)+","+Y(p)).join(" "),
+    fill:"none",stroke:"var(--surface-3)","stroke-width":9,
+    "stroke-linecap":"round","stroke-linejoin":"round"}));
+
+  // per-segment water state
+  let wetFrom=null, wetTo=null;
+  for(let i=1;i<RIVER.pts.length;i++){
+    const mid=(RIVER.mb[i-1]+RIVER.mb[i])/2;
+    const eff=waterOn(mid,t,sch.blocks);
+    if(eff){ const rm=DAM-mid; wetFrom=wetFrom===null?rm:Math.max(wetFrom,rm);
+             wetTo=wetTo===null?rm:Math.min(wetTo,rm); }
+    if(!eff) continue;
+    const w=3.2+4.8*Math.min(1,eff/UNIT_CFS[3]);
+    s.appendChild(el("line",{x1:X(RIVER.pts[i-1]),y1:Y(RIVER.pts[i-1]),
+      x2:X(RIVER.pts[i]),y2:Y(RIVER.pts[i]),stroke:"var(--series-1)",
+      "stroke-width":w,"stroke-linecap":"round"}));
+  }
+
+  // the selected reach
+  if(ti>pi){
+    const seg=[];
+    for(let m=milesBelow(put.rm);m<=milesBelow(take.rm)+0.001;m+=0.25) seg.push(RIVER.at(m));
+    seg.push(RIVER.at(milesBelow(take.rm)));
+    s.appendChild(el("polyline",{points:seg.map(p=>X(p)+","+Y(p)).join(" "),
+      fill:"none",stroke:"var(--series-3)","stroke-width":17,"stroke-opacity":.30,
+      "stroke-linecap":"round","stroke-linejoin":"round"}));
+  }
+
+  // access points -- markers first, then labels de-collided per side
+  const labels=[];
+  PTS.forEach((pt,i)=>{
+    const p=RIVER.at(milesBelow(pt.rm)), x=X(p), y=Y(p);
+    const sel=(i===pi||i===ti);
+    const c=el("circle",{cx:x,cy:y,r:sel?7:5,
+      fill:sel?"var(--series-3)":"var(--surface-1)",
+      stroke:sel?"var(--surface-1)":"var(--text-secondary)","stroke-width":sel?2.5:2});
+    const eff=waterOn(milesBelow(pt.rm),t,sch.blocks);
+    hoverTip(c,pt.n,["River mile "+pt.rm.toFixed(2)+" · "+milesBelow(pt.rm).toFixed(1)+" mi below the dam",
+      eff?("water up, ~"+Math.round(eff).toLocaleString()+" cfs"):"dead at "+clock(t)]);
+    s.appendChild(c);
+    // local tangent, so the label sits off the side of the channel rather than on it
+    const m=milesBelow(pt.rm);
+    const a=RIVER.at(Math.max(0,m-1.2)), bq=RIVER.at(Math.min(DAM,m+1.2));
+    let tx=X(bq)-X(a), ty=Y(bq)-Y(a);
+    const L=Math.hypot(tx,ty)||1; tx/=L; ty/=L;
+    let nx=-ty, ny=tx;                      // perpendicular
+    const cxm=(ox+(W-2*M-110)/2), cym=(oy+(H-2*M)/2);
+    if(nx*(x-cxm)+ny*(y-cym)<0){nx=-nx; ny=-ny;}   // point it away from the middle
+    labels.push({x,y,pt,sel,nx,ny});
+  });
+  const OFF=21;
+  labels.forEach(L=>{
+    L.right=L.nx>=0;
+    // a left-anchored label runs leftward, so near the left edge it must flip sides
+    if(!L.right && L.x-OFF<150) L.right=true;
+    if(L.right && L.x+OFF>W-150) L.right=false;
+    const dir=L.right?Math.abs(L.nx):-Math.abs(L.nx);
+    L.lx=L.x+dir*OFF; L.ly=L.y+L.ny*OFF+4;
+    L.lx=Math.max(L.right?12:150,Math.min(L.right?W-150:W-12,L.lx));
+    L.ly=Math.max(20,Math.min(H-46,L.ly)); });
+  // separate anything still stacked, per side
+  [true,false].forEach(side=>{
+    const grp=labels.filter(L=>L.right===side).sort((a,b)=>a.ly-b.ly);
+    let prev=-1e9;
+    grp.forEach(L=>{ if(L.ly<prev+31) L.ly=prev+31; prev=L.ly; });
+  });
+  labels.forEach(L=>{
+    s.appendChild(el("path",{d:`M${L.x} ${L.y} L${L.lx+(L.right?-3:3)} ${L.ly-4}`,
+      stroke:"var(--text-muted)","stroke-width":1,"stroke-opacity":.5,fill:"none"}));
+    TH(s,L.lx,L.ly,L.pt.n,
+      {anchor:L.right?"start":"end",size:11.5,weight:L.sel?700:550,
+       fill:L.sel?"var(--series-3)":"var(--text-primary)"});
+    TH(s,L.lx,L.ly+13,"RM "+L.pt.rm.toFixed(2),
+      {anchor:L.right?"start":"end",size:10,fill:"var(--text-muted)",halo:3});
+  });
+
+  // the boat
+  if(ti>pi){
+    const launch=+$("launch").value;
+    const sim=simulate(put.rm,take.rm,launch,sch.blocks,+$("vrun").value,+$("vstill").value);
+    if(sim && t>=launch && t<=sim.arrive){
+      const row=sim.track.find(r=>r[0]>=t)||sim.track[sim.track.length-1];
+      const p=RIVER.at(row[1]), x=X(p), y=Y(p);
+      s.appendChild(el("circle",{cx:x,cy:y,r:12,fill:"var(--series-2)","fill-opacity":.22}));
+      const b=el("circle",{cx:x,cy:y,r:6,fill:"var(--series-2)",
+        stroke:"var(--surface-1)","stroke-width":2});
+      hoverTip(b,"You",["RM "+(DAM-row[1]).toFixed(1)+" at "+clock(t),
+        (DAM-row[1]-take.rm).toFixed(1)+" mi to go"]);
+      s.appendChild(b);
+    }
+  }
+
+  // north arrow + scale bar
+  const nx=W-52, ny=M+14;
+  s.appendChild(el("path",{d:`M${nx} ${ny+16} L${nx} ${ny-12} M${nx-6} ${ny-4} L${nx} ${ny-12} L${nx+6} ${ny-4}`,
+    stroke:"var(--text-muted)","stroke-width":1.8,fill:"none","stroke-linecap":"round"}));
+  T(s,nx,ny+30,"N",{anchor:"middle",size:11,weight:700,fill:"var(--text-muted)"});
+  const barMi=5, barPx=barMi/69.0*sc;   // ~69 statute miles per degree of latitude
+  const bx=W-M-barPx-6, by=H-M+6;
+  s.appendChild(el("line",{x1:bx,x2:bx+barPx,y1:by,y2:by,stroke:"var(--text-muted)","stroke-width":2}));
+  [0,barPx].forEach(d=>s.appendChild(el("line",{x1:bx+d,x2:bx+d,y1:by-4,y2:by+4,
+    stroke:"var(--text-muted)","stroke-width":2})));
+  T(s,bx+barPx/2,by-9,barMi+" mi",{anchor:"middle",size:10.5,fill:"var(--text-muted)"});
+
+  const sm=schedSummary(sch);
+  $("mapnote").innerHTML = wetFrom===null
+    ? `Nothing is up anywhere below the dam at ${clock(t)}${sm.hours?"":" — no real generation scheduled this day"}.`
+    : `At <strong>${clock(t)}</strong> the release is on the river from about <strong>RM ${wetFrom.toFixed(1)}</strong> `+
+      `down to <strong>RM ${wetTo.toFixed(1)}</strong> — a ${(wetFrom-wetTo).toFixed(1)}-mile wet stretch. `+
+      `The line thins downstream because the same water is spread over a longer window the further it travels.`;
+}
+
+/* ─── float times between access points ─── */
+function drawLegs(){
+  const vR=+$("vrun").value||4.2, vS=+$("vstill").value||1.87;
+  let h="<thead><tr><th>Leg</th><th>Miles</th><th>Running</th><th>Still</th></tr></thead><tbody>";
+  for(let i=0;i<PTS.length-1;i++){
+    const d=PTS[i].rm-PTS[i+1].rm;
+    h+=`<tr><td>${PTS[i].n} → ${PTS[i+1].n}</td>`+
+       `<td>${d.toFixed(2)}</td><td>${dur(d/vR)}</td><td>${dur(d/vS)}</td></tr>`;
+  }
+  $("legs").innerHTML=h+"</tbody>";
+}
+
+/* ─── travel-time table ─── */
+function drawTT(){
+  const t=$("tt");
+  let h="<thead><tr><th>Point</th><th>RM</th><th>mi below dam</th>"+
+        "<th>1 unit</th><th>2 units</th><th>3 units</th><th>spread</th></tr></thead><tbody>";
+  PTS.slice(1).forEach(p=>{const m=milesBelow(p.rm);
+    const c=[1,2,3].map(u=>travelH(m,UNIT_CFS[u]));
+    const stretch=spreadH(m);
+    h+=`<tr${["nances","home"].includes(p.k)?' class="hi"':""}>`+
+       `<td>${p.n}</td><td>${p.rm.toFixed(2)}</td><td>${m.toFixed(1)}</td>`+
+       c.map(x=>`<td>${x?dur(x):"—"}</td>`).join("")+
+       `<td>+${dur(stretch)}</td></tr>`;});
+  t.innerHTML=h+"</tbody>";
+}
+
+["day","putin","takeout","launch","vrun","vstill"].forEach(id=>{
+  $(id).addEventListener("input",()=>{render();drawMap();drawLegs();});});
+$("mapTime").addEventListener("input",drawMap);
+$("mapNow").addEventListener("click",()=>{
+  $("mapTime").value=+$("launch").value; drawMap();});
+$("theme").onclick=()=>{const n=document.documentElement.getAttribute("data-theme");
+  const d=n?n==="dark":matchMedia("(prefers-color-scheme:dark)").matches;
+  document.documentElement.setAttribute("data-theme",d?"light":"dark");};
+
+render(); drawOutlook(); drawSeason(); drawMap(); drawLegs(); drawTT();
+hydrate().catch(e=>{DATA_STATE.errors.push(String(e));paintFreshness();});
+setInterval(()=>hydrate().catch(()=>{}), 20*60*1000);
+
+addEventListener("online",()=>{paintFreshness();hydrate().catch(()=>{});});
+addEventListener("offline",paintFreshness);
+
+/* ─── PWA ─── */
+if("serviceWorker" in navigator){
+  addEventListener("load",()=>navigator.serviceWorker.register("./sw.js").catch(()=>{}));
+  let reloaded=false;
+  navigator.serviceWorker.addEventListener("controllerchange",()=>{
+    if(reloaded)return; reloaded=true; location.reload();   // pick up a new deploy
+  });
+}
+let deferredPrompt=null;
+addEventListener("beforeinstallprompt",e=>{
+  e.preventDefault(); deferredPrompt=e; $("install").style.display="inline-block";});
+$("install").onclick=async()=>{
+  if(!deferredPrompt)return;
+  deferredPrompt.prompt(); await deferredPrompt.userChoice;
+  deferredPrompt=null; $("install").style.display="none";};
+addEventListener("appinstalled",()=>{$("install").style.display="none";});
+</script>
+</body></html>
