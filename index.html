@@ -958,8 +958,10 @@ function render(){
   const box=(lab,val,note,color,big)=>{
     const d=document.createElement("div"); d.className="vbox"+(big?" big":"");
     d.style.setProperty("--accent",color);
-    d.innerHTML=`<div class="vl">${lab}</div><div class="vv">${val}</div>
-      <div class="vn">${note}</div>`;
+    // An empty value drops the line entirely rather than printing a placeholder --
+    // "none" is not an answer to a yes/no question, it is just noise.
+    d.innerHTML=`<div class="vl">${lab}</div>`+(val?`<div class="vv">${val}</div>`:"")+
+      `<div class="vn">${note}</div>`;
     V.appendChild(d);};
   if(!sim){ box("Invalid","—","Take-out must be downstream of put-in","var(--critical)"); }
   else{
@@ -967,19 +969,23 @@ function render(){
     const v = margin>=0.75 ? ["Yes","var(--good)"]
             : margin>=0    ? ["Tight","var(--warning)"]
                            : ["No","var(--critical)"];
-    box("Should I go? Will I arrive before dark?",
+    box("Will I make it before dark?",
         `${v[0]} <small>out ${clock(sim.arrive)}</small>`,
         (margin>=0?dur(margin)+" of daylight left":dur(-margin)+" past sunset")+
         " · sunset "+clock(sun.sunset), v[1], true);
     box("Float time", dur(sim.dur),
         Math.round(sim.runFrac*100)+"% of it on moving water", "var(--series-3)");
-    const wl = sim.startedWet ? ["Water's up","Running at launch",
-          Math.round(sim.runFrac*100)+"% of the float stays wet"]
-      : sim.caught ? ["Wave catches you",clock(sim.caught[0]),
-          "at RM "+(DAM-sim.caught[1]).toFixed(1)+", "+
-          (DAM-sim.caught[1]-take.rm).toFixed(1)+" mi from take-out"]
-      : ["Dead water","none","you paddle the whole thing"];
-    box(wl[0],wl[1],wl[2],"var(--series-1)");
+    // One question, three answers. Dead water gets no value line at all -- the
+    // answer is in the note, and a stat that reads "none" says nothing.
+    const wl = sim.startedWet
+        ? ["Yes — running at launch",
+           Math.round(sim.runFrac*100)+"% of the float stays wet"]
+      : sim.caught
+        ? ["Yes — from "+clock(sim.caught[0]),
+           "wave reaches you at RM "+(DAM-sim.caught[1]).toFixed(1)+", "+
+           (DAM-sim.caught[1]-take.rm).toFixed(1)+" mi above the take-out"]
+        : ["", "No — dead water the whole way, you paddle it"];
+    box("Is the river running?",wl[0],wl[1],"var(--series-1)");
   }
 
   /* stats */
