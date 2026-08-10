@@ -5,7 +5,12 @@ name: Update river data
 # result as a plain file the page can fetch same-origin. No compute per visitor.
 on:
   schedule:
-    - cron: "*/30 * * * *"     # every half hour; TVA's observed feed is hourly
+    # Four times an hour, deliberately OFF :00 and :30. GitHub's scheduler is
+    # best-effort on a shared queue and drops runs under load -- the top and
+    # bottom of the hour are the most contended minutes on the platform, and a
+    # */30 cron lost three runs in a row on the first evening. Firing at odd
+    # minutes and more often means a dropped run costs ~15 min, not 90.
+    - cron: "7,22,37,52 * * * *"
   workflow_dispatch:            # and a "Run workflow" button for on-demand
 
 permissions:
