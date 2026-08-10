@@ -124,6 +124,7 @@ input[type=range]::-moz-range-thumb{width:18px;height:18px;border-radius:50%;
 .st .l{font-size:9.5px;text-transform:uppercase;letter-spacing:.1em;color:var(--text-muted);font-weight:680}
 .st .v{font-size:20px;font-weight:640;margin-top:5px;letter-spacing:-.02em}
 .st .n{font-size:11.5px;color:var(--text-muted);margin-top:3px;line-height:1.45}
+.st .sub{font-size:10.5px;color:var(--text-muted);opacity:.78;margin-top:4px;line-height:1.4}
 
 table{width:100%;border-collapse:collapse;font-size:13.5px}
 th,td{text-align:right;padding:11px 12px;border-bottom:1px solid var(--rule-soft)}
@@ -634,6 +635,34 @@ function scheduleFor(date,avgCfs){
   return {blocks:obs.concat(pub,mod),src,weekend};
 }
 
+// The day's release written out the way you'd say it: "2 turbines 10:00 AM to 8:00 PM".
+// Adjacent blocks at the same unit count are merged first -- the layering that builds a
+// day out of observed + published pieces leaves seams at the handoff hour, and those
+// seams are an artefact of where the record ends, not something the river does.
+function scheduleSentence(sch){
+  const g=sch.blocks.filter(b=>b.u>0).slice().sort((a,b)=>a.s-b.s);
+  if(!g.length) return "no generation scheduled — minimum flows only";
+  const m=[];
+  for(const b of g){
+    const last=m[m.length-1];
+    if(last && last.u===b.u && b.s-last.e<0.05) last.e=Math.max(last.e,b.e);
+    else m.push({s:b.s,e:b.e,u:b.u});
+  }
+  const end=h=>h>=23.98?"midnight":clock(h);
+  // Sub-90-minute blocks are minimum-flow pulses or the hour that spills over from the
+  // previous day's schedule. They are real and they are in the record, but they spread
+  // out to nothing before they reach anybody, so they go at the end as a footnote
+  // instead of breaking up the part of the day you can actually float.
+  const runs=m.filter(b=>(b.e-b.s)>=1.5), pulses=m.filter(b=>(b.e-b.s)<1.5);
+  const at=pulses.map(b=>clock(b.s)).join(" and ");
+  const said=runs.map(b=>`${b.u} turbine${b.u===1?"":"s"} ${clock(b.s)} to ${end(b.e)}`);
+  if(!said.length) return pulses.length
+    ? `minimum flows only — short run${pulses.length>1?"s":""} at ${at}`
+    : "no generation scheduled — minimum flows only";
+  if(pulses.length) said.push(pulses.length>1
+    ? `plus short runs at ${at}` : `plus a short run at ${at}`);
+  return said.join(" · ");
+}
 const schedSummary=sch=>{
   const gen=sch.blocks.filter(b=>b.u>0&&(b.e-b.s)>1.5);
   if(!gen.length) return {hours:0,units:0,start:null};
@@ -1172,15 +1201,16 @@ function render(){
     .sort((a,c)=>a.s-c.s)[0];
   const head=firstUse?travelH(_pm,UNIT_CFS[firstUse.u]):null;
   const S=$("stats"); S.innerHTML="";
-  const st=(l,v,n)=>{const d=document.createElement("div");d.className="st";
-    d.innerHTML=`<div class="l">${l}</div><div class="v">${v}</div><div class="n">${n||""}</div>`;
+  const st=(l,v,n,sub)=>{const d=document.createElement("div");d.className="st";
+    d.innerHTML=`<div class="l">${l}</div><div class="v">${v}</div>`+
+      `<div class="n">${n||""}</div>`+(sub?`<div class="sub">${sub}</div>`:"");
     S.appendChild(d);};
   st("Predicted outflow", pred.cfs.toLocaleString()+" cfs", pred.src+" · "+pred.conf+" confidence");
   const sm=schedSummary(sch);
   const us=[...new Set(sch.blocks.filter(b=>b.u>0&&(b.e-b.s)>1.5).map(b=>b.u))].sort();
   const tn=us.length>1?us[0]+"–"+us[us.length-1]:(us[0]||1);
   st("Generation", sm.hours?dur(sm.hours)+" · "+tn+" turbine"+(String(tn)==="1"?"":"s"):"minimum flows",
-     sm.start!=null?("from "+clock(sm.start)+" · "+SRC_LABEL[sch.src]):SRC_LABEL[sch.src]);
+     scheduleSentence(sch), SRC_LABEL[sch.src]);
   st("Usable water at "+put.n.split(" ")[0], head?clock(firstUse.s+head):"never",
      head?("~"+Math.round(effectiveCfs(UNIT_CFS[firstUse.u],firstUse.e-firstUse.s,_pm)).toLocaleString()
            +" cfs after "+dur(head))
