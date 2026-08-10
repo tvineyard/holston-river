@@ -2,7 +2,7 @@
    Shell is cache-first so the app opens instantly and works with no signal.
    TVA data is stale-while-revalidate: you always get the last good numbers
    immediately, and they refresh in the background when there is a connection. */
-const VERSION = "holston-v3";
+const VERSION = "holston-v4";
 const SHELL   = VERSION + "-shell";
 const DATA    = VERSION + "-data";
 const ASSETS = ["./", "./index.html", "./manifest.webmanifest",
@@ -37,9 +37,14 @@ self.addEventListener("fetch", e => {
   if (url.pathname.includes("/data/tva.json")) {
     e.respondWith((async () => {
       const cache = await caches.open(DATA);
-      const cached = await cache.match(request);
+      // Store under the bare path, NOT the request URL. The page cache-busts with
+      // ?t=<now>, so keying on the full URL wrote a brand-new entry on every load
+      // that could never be matched again: offline got a 503 instead of the last
+      // good numbers, and the cache grew without bound. One key, one copy.
+      const key = url.origin + url.pathname;
+      const cached = await cache.match(key);
       const network = fetch(request).then(res => {
-        if (res && res.ok) cache.put(request, res.clone());
+        if (res && res.ok) cache.put(key, res.clone());
         return res;
       }).catch(() => null);
       // Network first for the data file so a fresh page load gets fresh numbers,

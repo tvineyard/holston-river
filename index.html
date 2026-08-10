@@ -364,7 +364,9 @@ code{background:var(--surface-2);padding:2px 6px;border-radius:5px;font-size:11.
 
 <p class="foot">
 Sources — TVA <code>RestApi/{observed-data-48-hours, generation-releases, predicted-data, operating-guide}/CRKT1</code>;
-NOAA NWPS <code>gauges/CRLT1</code>; USGS <code>03495005</code> Flat Creek (rain detector).
+weather from Open-Meteo for the same coordinates.
+NOAA's NWPS gauge and the USGS Flat Creek gauge were evaluated and are <em>not</em> inputs — neither
+adds anything TVA does not already publish for this stretch.
 Travel-time anchors and scheduling behaviour per TVA river-forecasting guidance.
 River miles from the TVA Holston blueway map. Sun times computed with the NOAA solar algorithm for 36.10°N, 83.63°W.
 </p>
@@ -482,13 +484,28 @@ const areaAcres=h=>27700+351*(h-1067.6);
 const cfsPerFtDay=h=>areaAcres(h)*0.50417;
 const interp=(tbl,x)=>{for(let i=0;i<tbl.length-1;i++){const[a,av]=tbl[i],[b,bv]=tbl[i+1];
   if(x>=a&&x<=b)return av+(bv-av)*(x-a)/(b-a);} return tbl[tbl.length-1][1];};
-const doy=d=>Math.floor((d-new Date(d.getFullYear(),0,0))/864e5);
+// Day of year from the calendar fields, NOT from a millisecond difference. Subtracting
+// two local Dates across a DST boundary is 23 or 25 hours short/long, so the old
+// floor() version read a day light every year from March to November.
+const doy=d=>Math.round((Date.UTC(d.getFullYear(),d.getMonth(),d.getDate())
+                        -Date.UTC(d.getFullYear(),0,0))/864e5);
 
 /* ─── sun (USNO low-precision solar position) ─── */
 function dayNum(d){return Date.UTC(d.getFullYear(),d.getMonth(),d.getDate())/864e5-10957.5;}
-function tzOff(d){ // hours WEST of UTC: EDT=4 (Mar 8 - Nov 1, 2026), else EST=5
-  const y=d.getFullYear(),st=new Date(y,2,8),en=new Date(y,10,1);
-  return (d>=st&&d<en)?4:5;}
+// Hours WEST of UTC. US rule since 2007: DST starts the 2nd Sunday in March at 2:00
+// local and ends the 1st Sunday in November at 2:00 local. Computed per year -- the
+// previous version hardcoded 2026's dates (Mar 8 / Nov 1) and was wrong by up to a
+// week in every other year, which is a full hour of sunset error.
+function nthSunday(y,month,n){
+  const first=new Date(y,month,1);
+  return new Date(y,month,1+((7-first.getDay())%7)+(n-1)*7);
+}
+function tzOff(d){
+  const y=d.getFullYear();
+  const st=nthSunday(y,2,2), en=nthSunday(y,10,1);
+  st.setHours(2,0,0,0); en.setHours(2,0,0,0);
+  return (d>=st && d<en) ? 4 : 5;
+}
 function sunTimes(date){
   const rad=Math.PI/180, D=dayNum(date);
   const g=(357.529+0.98560028*D)*rad;                 // mean anomaly
@@ -717,10 +734,18 @@ function parseObservedBlocks(rows){
     if(S[i].elev>500){ CURRENT_ELEV=S[i].elev; CURRENT_ELEV_AT=S[i].end; break; }
   }
   const out={}; let run=null;
+  // A run that crosses midnight has to appear on BOTH days. Filing it only under the
+  // start day as hours 22-26 left the next morning with no water on it at all, even
+  // though the river was still up when you woke.
   const flush=()=>{ if(!run)return;
-    const day=new Date(run.start); day.setHours(0,0,0,0);
-    const k=isoOf(day);
-    (out[k]=out[k]||[]).push([(run.start-day)/36e5,(run.end-day)/36e5,run.u]);
+    let day=new Date(run.start); day.setHours(0,0,0,0);
+    let s=(run.start-day)/36e5, e=(run.end-day)/36e5;
+    while(e>24){
+      (out[isoOf(day)]=out[isoOf(day)]||[]).push([s,24,run.u]);
+      day=new Date(day); day.setDate(day.getDate()+1);
+      s=0; e-=24;
+    }
+    if(e>s) (out[isoOf(day)]=out[isoOf(day)]||[]).push([s,e,run.u]);
     run=null; };
   for(const sm of S){
     const u=classify_discharge_js(sm.cfs);
@@ -962,16 +987,42 @@ const SRC_LABEL={observed:"observed record",published:"TVA published schedule",
   "published+model":"TVA's posted hours, rest modelled",model:"modelled from guide curve"};
 const $=id=>document.getElementById(id);
 const TIP=()=>document.getElementById("tip");
+// Chart detail on a phone. A mouse hovers; a finger taps and then leaves. So the tip
+// is driven by POINTER events (which cover mouse, touch and pen), it stays up after a
+// tap until you tap somewhere else, and on a narrow screen it parks at the bottom of
+// the viewport instead of under your fingertip where you cannot read it.
+let TIP_OWNER=null;
+function placeTip(t,x,y){
+  const w=t.offsetWidth||190, h=t.offsetHeight||60;
+  // visualViewport, not innerHeight -- on iOS Safari the two differ by the height of
+  // the address bar, and a tip parked against innerHeight sits below the screen.
+  const vv=window.visualViewport;
+  const vw=vv?vv.width:window.innerWidth, vh=vv?vv.height:window.innerHeight;
+  const ox=vv?vv.offsetLeft:0, oy=vv?vv.offsetTop:0;
+  if(vw<560){                                // phone: pinned strip, never under the thumb
+    t.style.left=(ox+Math.max(8,(vw-w)/2))+"px";
+    t.style.top=(oy+vh-h-14)+"px";
+  }else{
+    t.style.left=(ox+Math.min(vw-w-12,Math.max(8,x+16)))+"px";
+    t.style.top=(oy+Math.max(10,y-h-14))+"px";
+  }
+}
+function hideTip(){ const t=TIP(); if(t)t.classList.remove("on"); TIP_OWNER=null; }
 function hoverTip(node,title,rows){
   node.style.cursor="crosshair";
-  node.addEventListener("mousemove",e=>{const t=TIP(); if(!t)return;
+  const show=e=>{
+    const t=TIP(); if(!t)return;
     t.innerHTML=`<div class="tt">${title}</div>`+rows.map(r=>`<div class="tr">${r}</div>`).join("");
-    t.classList.add("on");
-    const w=t.offsetWidth||190, h=t.offsetHeight||60;
-    t.style.left=Math.min(window.innerWidth-w-12,e.clientX+16)+"px";
-    t.style.top=Math.max(10,e.clientY-h-14)+"px";});
-  node.addEventListener("mouseleave",()=>{const t=TIP(); if(t)t.classList.remove("on");});
+    t.classList.add("on"); TIP_OWNER=node;
+    placeTip(t,e.clientX,e.clientY);
+  };
+  node.addEventListener("pointerdown",e=>{ show(e); e.stopPropagation(); });
+  node.addEventListener("pointermove",e=>{ if(e.pointerType==="mouse") show(e); });
+  node.addEventListener("pointerleave",e=>{ if(e.pointerType==="mouse") hideTip(); });
 }
+// Tap anywhere else, or scroll, and the tip goes away.
+addEventListener("pointerdown",()=>{ if(TIP_OWNER) hideTip(); });
+addEventListener("scroll",()=>{ if(TIP_OWNER) hideTip(); },{passive:true});
 const BACK=4;   // a few days of hindsight -- useful for checking a float you just did
 const days=[]; for(let i=-BACK;i<70;i++){const d=new Date(TODAY);d.setDate(d.getDate()+i);days.push(d);}
 const TODAY_IDX=BACK;
