@@ -156,6 +156,16 @@ code{background:var(--surface-2);padding:2px 6px;border-radius:5px;font-size:11.
 .badge i{width:7px;height:7px;border-radius:50%;background:currentColor;flex:none}
 .badge.ok{color:var(--good)} .badge.warn{color:var(--warning)}
 .hdr-right{display:flex;align-items:center;gap:9px;flex-wrap:wrap}
+#refresh{display:inline-flex;align-items:center;justify-content:center;padding:0;
+  width:36px;height:36px;border-radius:10px}
+#refresh svg{width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:2;
+  stroke-linecap:round;stroke-linejoin:round}
+#refresh[data-busy="1"]{pointer-events:none;opacity:.75}
+#refresh[data-busy="1"] svg{animation:spin .9s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+@media(prefers-reduced-motion:reduce){#refresh[data-busy="1"] svg{animation:none}}
+.badge{cursor:pointer;user-select:none}
+.badge:hover{border-color:var(--text-muted)}
 #install{display:none}
 @media(max-width:640px){
   .wrap{padding:0 13px}
@@ -182,7 +192,11 @@ code{background:var(--surface-2);padding:2px 6px;border-radius:5px;font-size:11.
     <p class="sub">Cherokee Dam releases · float times · daylight</p></div>
   </div>
   <div class="hdr-right">
-    <span class="badge" id="fresh"><i></i>Loading…</span>
+    <span class="badge" id="fresh" role="button" tabindex="0"
+          title="Click to check for new river data"><i></i>Loading…</span>
+    <button id="refresh" title="Check for new river data" aria-label="Check for new river data">
+      <svg viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/></svg>
+    </button>
     <button id="install">Install</button>
     <button id="theme">Theme</button>
   </div>
@@ -1297,6 +1311,38 @@ $("theme").onclick=()=>{const n=document.documentElement.getAttribute("data-them
 render(); drawOutlook(); drawSeason(); drawMap(); drawLegs(); drawTT();
 hydrate().catch(e=>{DATA_STATE.errors.push(String(e));paintFreshness();});
 setInterval(()=>hydrate().catch(()=>{}), 20*60*1000);
+
+// Manual refresh. Important honesty point: this re-reads the published data file,
+// it does NOT make the scheduled job run. If the upstream reading hasn't changed,
+// say so plainly rather than flashing something that implies fresh numbers.
+let REFRESHING=false;
+async function manualRefresh(){
+  if(REFRESHING) return;
+  REFRESHING=true;
+  const btn=$("refresh"), el=$("fresh");
+  if(btn) btn.dataset.busy="1";
+  const before=DATA_STATE.fetchedAt ? +DATA_STATE.fetchedAt : null;
+  el.className="badge"; el.innerHTML='<i></i>Checking…';
+  try{ await hydrate(); }catch(e){ /* hydrate paints its own failure */ }
+  const after=DATA_STATE.fetchedAt ? +DATA_STATE.fetchedAt : null;
+  if(btn) btn.dataset.busy="0";
+  REFRESHING=false;
+  if(before && after && before===after){
+    const t=new Date(after).toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit"});
+    el.className="badge warn";
+    el.innerHTML=`<i></i>No new reading · still ${t}`;
+    el.title="The site refreshed, but TVA has not been re-read since "+t+
+             ". The job runs at :07, :22, :37 and :52.";
+    setTimeout(paintFreshness,4000);
+  }
+}
+$("refresh").addEventListener("click",manualRefresh);
+$("fresh").addEventListener("click",manualRefresh);
+$("fresh").addEventListener("keydown",e=>{
+  if(e.key==="Enter"||e.key===" "){e.preventDefault();manualRefresh();}});
+// Coming back to an installed app should re-check without a manual tap.
+document.addEventListener("visibilitychange",()=>{
+  if(document.visibilityState==="visible") hydrate().catch(()=>{});});
 
 addEventListener("online",()=>{paintFreshness();hydrate().catch(()=>{});});
 addEventListener("offline",paintFreshness);
