@@ -461,6 +461,12 @@ let PUBLISHED_BLOCKS={
 // look published, the day's only block was 00:00-01:00, and the app reported no
 // water on a day it should have modelled.
 let PUBLISHED_COVER={"2026-08-09":24};
+// How far into each day the OBSERVED record reaches, in local hours. Today's record
+// stops at the current hour, and "no water recorded yet" is not the same as "no water
+// today" -- without this, every day went dead from the present moment onward.
+// Seeded to match the baked-in OBSERVED_BLOCKS above, so the two never disagree if a
+// live read fails and the app falls back to them.
+let OBSERVED_COVER={"2026-08-08":24};
 // Guide curve, day-of-year -> target elevation (TVA operating-guide)
 let GUIDE=[[1,1041.00],[46,1039.52],[60,1040.79],[91,1050.19],[105,1055.99],
              [121,1062.51],[135,1068.02],[152,1070.57],[182,1069.06],[213,1069.00],
@@ -589,31 +595,43 @@ function synthesise(date,avgCfs,opt){
   return {blocks:keep.concat(blocks).filter(b=>b.e>b.s),src:"model",weekend};
 }
 
+// A day is assembled in three layers, each only covering the hours the layer before it
+// could not reach:
+//
+//   observed  -- what the river actually did, up to the last hour TVA has reported
+//   published -- TVA's posted schedule, for the hours after that
+//   modelled  -- the guide curve, for anything past the published horizon
+//
+// The old version returned observed ALONE whenever any observed row existed for the
+// day. On today's date that means the schedule stopped at the current hour: at 9 AM
+// the app believed the river shut off at 8 and stayed off, on a day TVA had published
+// "2 or more, 1 AM to midnight". The record running out is not the water running out.
 function scheduleFor(date,avgCfs){
   const iso=isoOf(date);
-  if(OBSERVED_BLOCKS[iso]){
-    const blocks=OBSERVED_BLOCKS[iso].map(b=>({s:b[0],e:b[1],u:b[2],src:"observed"}));
-    return {blocks,src:"observed",weekend:[0,6].includes(date.getDay())};
-  }
   const weekend=[0,6].includes(date.getDay());
-  const cover=PUBLISHED_COVER[iso]||0;
-  if(PUBLISHED_BLOCKS[iso]&&cover>=22){          // TVA has posted the whole day
-    const blocks=reconcile(PUBLISHED_BLOCKS[iso],budgetFor(date,avgCfs))
-                   .filter(b=>b.u>0);
-    return {blocks,src:"published",weekend};
-  }
-  if(cover>0){
-    // Partly published. Almost always this is the one-hour spillover from the
-    // previous day's post. Use the real hours as far as they go, then model the
-    // rest -- treating the orphan hour as the whole day is what made Tuesday
-    // read as no water.
-    const pub=reconcile(PUBLISHED_BLOCKS[iso]||[],budgetFor(date,avgCfs))
-                .filter(b=>b.u>0);
-    const spent=pub.reduce((t,b)=>t+UNIT_CFS[b.u]*(b.e-b.s),0);
-    const rest=synthesise(date,avgCfs,{after:cover,spent});
-    return {blocks:pub.concat(rest.blocks),src:"published+model",weekend,partial:cover};
-  }
-  return synthesise(date,avgCfs);
+  const budget=budgetFor(date,avgCfs);
+  const FULL=23.5;                      // close enough to a whole day to stop layering
+
+  const obsTo=OBSERVED_COVER[iso]||0;
+  const obs=(OBSERVED_BLOCKS[iso]||[]).map(b=>({s:b[0],e:b[1],u:b[2],src:"observed"}));
+  if(obsTo>=FULL) return {blocks:obs,src:"observed",weekend};
+
+  // Published, trimmed to the day's volume exactly as before, then clipped to the
+  // hours the observed record has not already settled.
+  const pubTo=PUBLISHED_COVER[iso]||0;
+  const pub=(PUBLISHED_BLOCKS[iso]?reconcile(PUBLISHED_BLOCKS[iso],budget):[])
+              .filter(b=>b.u>0)
+              .map(b=>({...b,s:Math.max(b.s,obsTo)}))
+              .filter(b=>b.e>b.s);
+
+  const after=Math.max(obsTo,pubTo);
+  const spent=obs.concat(pub).reduce((t,b)=>t+UNIT_CFS[b.u]*(b.e-b.s),0);
+  const mod=after>=FULL?[]:synthesise(date,avgCfs,{after,spent}).blocks;
+
+  const src = obs.length ? (pub.length?"observed+published":mod.length?"observed+model":"observed")
+            : pub.length ? (mod.length?"published+model":"published")
+            : "model";
+  return {blocks:obs.concat(pub,mod),src,weekend};
 }
 
 const schedSummary=sch=>{
@@ -733,6 +751,15 @@ function parseObservedBlocks(rows){
   for(let i=S.length-1;i>=0;i--){
     if(S[i].elev>500){ CURRENT_ELEV=S[i].elev; CURRENT_ELEV_AT=S[i].end; break; }
   }
+  // Coverage counts every sample, including the zero-discharge hours: "the river was
+  // observed to be off at 10 AM" is a fact, "we have no reading for 10 AM yet" is not.
+  const cover={};
+  for(const sm of S){
+    const st=new Date(sm.end); st.setHours(st.getHours()-1);
+    const day=new Date(st); day.setHours(0,0,0,0);
+    const k=isoOf(day), to=(sm.end-day)/36e5;
+    cover[k]=Math.max(cover[k]||0,to);
+  }
   const out={}; let run=null;
   // A run that crosses midnight has to appear on BOTH days. Filing it only under the
   // start day as hours 22-26 left the next morning with no water on it at all, even
@@ -754,7 +781,9 @@ function parseObservedBlocks(rows){
     if(run && run.u===u && +run.end===+st) run.end=sm.end;
     else { flush(); run={start:st,end:sm.end,u}; }
   }
-  flush(); return out;
+  flush();
+  if(Object.keys(cover).length) OBSERVED_COVER=cover;
+  return out;
 }
 function classify_discharge_js(cfs){
   if(cfs==null) return null;
@@ -984,7 +1013,10 @@ const dur=h=>{if(h==null)return"\u2014";let t=Math.round(h*60);const H=Math.floo
   return (H?H+"h ":"")+(t-H*60)+"m";};
 
 const SRC_LABEL={observed:"observed record",published:"TVA published schedule",
-  "published+model":"TVA's posted hours, rest modelled",model:"modelled from guide curve"};
+  "published+model":"TVA's posted hours, rest modelled",
+  "observed+published":"what has run so far, then TVA's posted schedule",
+  "observed+model":"what has run so far, rest modelled",
+  model:"modelled from guide curve"};
 const $=id=>document.getElementById(id);
 const TIP=()=>document.getElementById("tip");
 // Chart detail on a phone. A mouse hovers; a finger taps and then leaves. So the tip
