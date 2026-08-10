@@ -1,6 +1,6 @@
 {
   "name": "Holston River Planner",
-  "short_name": "Holston",
+  "short_name": "Holston River Planner",
   "description": "When the Holston runs below Cherokee Dam — float times, daylight, and where the release is right now.",
   "start_url": "./",
   "scope": "./",
