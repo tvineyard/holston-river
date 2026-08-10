@@ -145,6 +145,16 @@ tr.hi td:first-child{box-shadow:inset 3px 0 0 var(--series-1)}
 .legend{display:flex;gap:20px;flex-wrap:wrap;font-size:12px;color:var(--text-secondary);margin-top:15px}
 .legend span{display:inline-flex;align-items:center;gap:7px}
 .sw{width:10px;height:10px;border-radius:3px;flex:none}
+.settings{margin:0 0 16px;padding:18px 20px;border:1px solid var(--rule);
+  border-radius:15px;background:var(--surface-2)}
+.settings[hidden]{display:none}
+.settings .eyebrow{display:flex;align-items:center;gap:10px}
+.settings .x{margin-left:auto;background:none;border:0;cursor:pointer;
+  color:var(--text-muted);font-size:16px;line-height:1;padding:2px 5px}
+.set-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px;
+  margin-top:12px}
+.set-row input{width:100%}
+.settings .note{margin-top:14px}
 /* iPhone has no install prompt -- Apple never shipped one -- so the app has to
    explain the Share > Add to Home Screen path itself. */
 .ios-hint{display:none;align-items:flex-start;gap:12px;margin:0 0 16px;padding:16px 18px;
@@ -185,10 +195,13 @@ code{background:var(--surface-2);padding:2px 6px;border-radius:5px;font-size:11.
 .badge i{width:7px;height:7px;border-radius:50%;background:currentColor;flex:none}
 .badge.ok{color:var(--good)} .badge.warn{color:var(--warning)}
 .hdr-right{display:flex;align-items:center;gap:9px;flex-wrap:wrap}
-#refresh{display:inline-flex;align-items:center;justify-content:center;padding:0;
+#refresh,#gear{display:inline-flex;align-items:center;justify-content:center;padding:0;
   width:36px;height:36px;border-radius:10px}
-#refresh svg{width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:2;
+/* fill:none matters -- the global `svg{width:100%}` rule turns an unstyled icon into
+   a full-width black blob. */
+#refresh svg,#gear svg{width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:2;
   stroke-linecap:round;stroke-linejoin:round}
+#gear[aria-expanded="true"]{border-color:var(--accent-1);color:var(--accent-1)}
 #refresh[data-busy="1"]{pointer-events:none;opacity:.75}
 #refresh[data-busy="1"] svg{animation:spin .9s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
@@ -228,8 +241,26 @@ code{background:var(--surface-2);padding:2px 6px;border-radius:5px;font-size:11.
     </button>
     <button id="install">Install</button>
     <button id="theme">Theme</button>
+    <button id="gear" title="Settings" aria-label="Settings" aria-expanded="false">
+      <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.1"/>
+        <path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1 1.56V21a2 2 0 1 1-4 0v-.09A1.7 1.7 0 0 0 9 19.4a1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.7 1.7 0 0 0 .34-1.87 1.7 1.7 0 0 0-1.56-1H3a2 2 0 1 1 0-4h.09A1.7 1.7 0 0 0 4.6 9a1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-1.56V3a2 2 0 1 1 4 0v.09a1.7 1.7 0 0 0 1 1.56 1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.7 1.7 0 0 0 19.4 9v0a1.7 1.7 0 0 0 1.56 1H21a2 2 0 1 1 0 4h-.09a1.7 1.7 0 0 0-1.56 1z"/></svg>
+    </button>
   </div>
 </header>
+
+<!-- Set-once calibration, not a per-trip control -- it lives behind the cog so the
+     planner row stays down to the four things that change every float. -->
+<div class="settings" id="settings" hidden>
+  <div class="eyebrow"><h2>Settings</h2>
+    <button class="x" id="gearx" aria-label="Close settings">✕</button></div>
+  <div class="set-row">
+    <div class="f"><label for="vrun">Your speed on running water (mph)</label>
+      <input type="number" id="vrun" value="4.2" step="0.1" min="0.5" max="12"></div>
+    <div class="f"><label for="vstill">Your speed on dead water (mph)</label>
+      <input type="number" id="vstill" value="1.7" step="0.05" min="0.3" max="8"></div>
+  </div>
+  <p class="note" id="setnote"></p>
+</div>
 
 <div class="ios-hint" id="ioshint">
   <div>Tap the Share button
@@ -251,10 +282,6 @@ code{background:var(--surface-2);padding:2px 6px;border-radius:5px;font-size:11.
     <div class="f"><label>Put in</label><select id="putin"></select></div>
     <div class="f"><label>Take out</label><select id="takeout"></select></div>
     <div class="f"><label>Launch <b id="lt"></b></label><input type="range" id="launch" min="5" max="21" step="0.0833333"></div>
-    <div class="f"><label>Speed running / still (mph)</label>
-      <div style="display:flex;gap:6px">
-        <input type="number" id="vrun" value="4.2" step="0.1" style="width:72px">
-        <input type="number" id="vstill" value="1.7" step="0.05" style="width:72px"></div></div>
   </div>
   <div class="verdict" id="verdict"></div>
   <div class="stats" id="stats"></div>
@@ -956,8 +983,14 @@ PTS.forEach((p,i)=>{
 days.forEach((d,i)=>$("day").appendChild(new Option(
   fmtD(d)+(i===TODAY_IDX?"  ·  today":i<TODAY_IDX?"  ·  past":""),i)));
 $("putin").value=2; $("takeout").value=3; $("day").value=TODAY_IDX; $("launch").value=15;
+// Defaults come from the logged floats. A value the user has typed in Settings
+// outranks them -- it is their boat and their arms.
 $("vstill").value=calibratedStill().toFixed(2);
 if(calibratedRun()) $("vrun").value=calibratedRun().toFixed(2);
+const SPEED_KEY="holston-speeds";
+try{ const v=JSON.parse(localStorage.getItem(SPEED_KEY)||"null");
+  if(v && v.run>0 && v.still>0){ $("vrun").value=v.run; $("vstill").value=v.still; }
+}catch{}
 
 /* ─── outflow prediction for a date ─── */
 // How far off the guide curve the pool currently is.
@@ -1574,6 +1607,34 @@ $("fresh").addEventListener("keydown",e=>{
 // Coming back to an installed app should re-check without a manual tap.
 document.addEventListener("visibilitychange",()=>{
   if(document.visibilityState==="visible") hydrate().catch(()=>{});});
+
+/* ─── settings ─── */
+function setNote(){
+  const r=+$("vrun").value, s=+$("vstill").value;
+  if(!(r>0&&s>0)) return;
+  const one=s+(r-s)*Math.min(1,UNIT_CFS[1]/UNIT_CFS[2]);
+  $("setnote").innerHTML=
+    `These are the two ends of a scale, not one fixed speed. Two turbines or more `+
+    `and you travel at <strong>${r.toFixed(2)} mph</strong>. Dead water is `+
+    `<strong>${s.toFixed(2)} mph</strong>. One turbine lands in between, about `+
+    `<strong>${one.toFixed(2)} mph</strong> — and slower than that well downstream, `+
+    `where a short release has spread out and lost its push. Set these from a float `+
+    `you have actually timed; every travel time in the app re-centres on them.`;
+}
+["vrun","vstill"].forEach(id=>$(id).addEventListener("input",()=>{
+  setNote();
+  try{ localStorage.setItem(SPEED_KEY,
+    JSON.stringify({run:+$("vrun").value, still:+$("vstill").value})); }catch{}
+}));
+const openSettings=on=>{
+  $("settings").hidden=!on;
+  $("gear").setAttribute("aria-expanded",String(on));
+  if(on){ setNote(); $("settings").scrollIntoView({behavior:"smooth",block:"center"}); }
+};
+$("gear").onclick=()=>openSettings($("settings").hidden);
+$("gearx").onclick=()=>openSettings(false);
+addEventListener("keydown",e=>{ if(e.key==="Escape") openSettings(false); });
+setNote();
 
 // Weather rides along, but never in front: it re-renders when it lands and is
 // silently dropped if it doesn't.
