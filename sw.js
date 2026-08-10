@@ -2,7 +2,7 @@
    Shell is cache-first so the app opens instantly and works with no signal.
    TVA data is stale-while-revalidate: you always get the last good numbers
    immediately, and they refresh in the background when there is a connection. */
-const VERSION = "holston-v1";
+const VERSION = "holston-v2";
 const SHELL   = VERSION + "-shell";
 const DATA    = VERSION + "-data";
 const ASSETS = ["./", "./index.html", "./manifest.webmanifest",
@@ -47,9 +47,12 @@ self.addEventListener("fetch", e => {
   }
 
   // Navigation: try the network so a redeploy lands, fall back to the cached shell.
+  // cache:"no-cache" forces revalidation — without it the browser's HTTP cache can
+  // hand back a 10-minute-old index.html (GitHub Pages sets max-age=600) and a new
+  // deploy silently does not appear until that expires.
   if (request.mode === "navigate") {
     e.respondWith(
-      fetch(request).then(res => {
+      fetch(request, { cache: "no-cache" }).then(res => {
         caches.open(SHELL).then(c => c.put("./index.html", res.clone()));
         return res;
       }).catch(() => caches.match("./index.html").then(r => r || caches.match("./"))));
