@@ -393,6 +393,13 @@ let OBSERVED_BLOCKS={
 let PUBLISHED_BLOCKS={
   "2026-08-09":[[2,3,1,1],[8,9,1,1],[14,21,2,3]]
 };
+// How far into each day TVA's published rows actually reach, in local hours.
+// This is NOT the same as "the day has blocks": TVA's next-day post routinely
+// spills one hour past midnight ("Midnight - 1 AM, 2 or more" filed under the
+// FOLLOWING day). Without this, that one orphan hour made the whole next day
+// look published, the day's only block was 00:00-01:00, and the app reported no
+// water on a day it should have modelled.
+let PUBLISHED_COVER={"2026-08-09":24};
 // Guide curve, day-of-year -> target elevation (TVA operating-guide)
 let GUIDE=[[1,1041.00],[46,1039.52],[60,1040.79],[91,1050.19],[105,1055.99],
              [121,1062.51],[135,1068.02],[152,1070.57],[182,1069.06],[213,1069.00],
@@ -472,30 +479,38 @@ function reconcile(blocks,budget){
 // the SMALLEST unit count that will move the day's volume, spread across a long
 // window -- not a short burst at high output. 08/08 was one unit for eleven hours,
 // not two units for six.
-function synthesise(date,avgCfs){
+// opt.after -- only model hours at or beyond this one (the earlier part of the day
+// is already published). opt.spent -- cfs-hours the published part has committed,
+// so the modelled remainder does not double-spend the day's water.
+function synthesise(date,avgCfs,opt){
+  const after=Math.max(0,(opt&&opt.after)||0), used=(opt&&opt.spent)||0;
   const dow=date.getDay(), weekend=(dow===0||dow===6);
-  const budget=budgetFor(date,avgCfs);
-  const pulses=[{s:2,e:3,u:1,src:"model"},{s:8,e:9,u:1,src:"model"}];
-  let gen=budget-2*UNIT_CFS[1];
+  const budget=Math.max(0,budgetFor(date,avgCfs)-used);
+  const pulses=[{s:2,e:3,u:1,src:"model"},{s:8,e:9,u:1,src:"model"}]
+                 .filter(p=>p.s>=after);
+  const floor=Math.max(5,after);
+  let gen=budget-pulses.length*UNIT_CFS[1];
   if(gen<UNIT_CFS[1]) return {blocks:pulses.slice(0,1),src:"model",weekend};
 
-  const maxWindow=weekend?13:20;
+  const room=Math.max(1,24-floor);       // hours left in the day we can actually use
+  const maxWindow=Math.min(weekend?13:20,room);
   let u=1, hours=gen/UNIT_CFS[1];
   while(u<3 && hours>maxWindow){u++; hours=gen/UNIT_CFS[u];}
-  hours=Math.min(hours,23);
+  hours=Math.min(hours,room);
 
   const warm=doy(date)<288;              // single afternoon peak until ~mid-October
   const blocks=[];
   if(warm){
-    let st=Math.max(5,Math.min(15.5-hours/2, 24-hours));
-    if(hours>=18) st=Math.max(5,15.5-hours/2);
+    let st=Math.max(floor,Math.min(15.5-hours/2, 24-hours));
+    if(hours>=18) st=Math.max(floor,15.5-hours/2);
     blocks.push({s:st,e:st+hours,u,src:"model"});
   } else {                                // cool: morning peak + evening peak
-    blocks.push({s:6.5,e:6.5+hours*0.4,u,src:"model"});
-    blocks.push({s:16,e:16+hours*0.6,u,src:"model"});
+    const m=Math.max(6.5,floor), ev=Math.max(16,floor);
+    blocks.push({s:m,e:Math.min(24,m+hours*0.4),u,src:"model"});
+    blocks.push({s:ev,e:Math.min(24,ev+hours*0.6),u,src:"model"});
   }
   const keep=pulses.filter(pl=>!blocks.some(b=>pl.s>=b.s&&pl.s<b.e));
-  return {blocks:keep.concat(blocks),src:"model",weekend};
+  return {blocks:keep.concat(blocks).filter(b=>b.e>b.s),src:"model",weekend};
 }
 
 function scheduleFor(date,avgCfs){
@@ -504,10 +519,23 @@ function scheduleFor(date,avgCfs){
     const blocks=OBSERVED_BLOCKS[iso].map(b=>({s:b[0],e:b[1],u:b[2],src:"observed"}));
     return {blocks,src:"observed",weekend:[0,6].includes(date.getDay())};
   }
-  if(PUBLISHED_BLOCKS[iso]){
+  const weekend=[0,6].includes(date.getDay());
+  const cover=PUBLISHED_COVER[iso]||0;
+  if(PUBLISHED_BLOCKS[iso]&&cover>=22){          // TVA has posted the whole day
     const blocks=reconcile(PUBLISHED_BLOCKS[iso],budgetFor(date,avgCfs))
                    .filter(b=>b.u>0);
-    return {blocks,src:"published",weekend:[0,6].includes(date.getDay())};
+    return {blocks,src:"published",weekend};
+  }
+  if(cover>0){
+    // Partly published. Almost always this is the one-hour spillover from the
+    // previous day's post. Use the real hours as far as they go, then model the
+    // rest -- treating the orphan hour as the whole day is what made Tuesday
+    // read as no water.
+    const pub=reconcile(PUBLISHED_BLOCKS[iso]||[],budgetFor(date,avgCfs))
+                .filter(b=>b.u>0);
+    const spent=pub.reduce((t,b)=>t+UNIT_CFS[b.u]*(b.e-b.s),0);
+    const rest=synthesise(date,avgCfs,{after:cover,spent});
+    return {blocks:pub.concat(rest.blocks),src:"published+model",weekend,partial:cover};
   }
   return synthesise(date,avgCfs);
 }
@@ -656,13 +684,17 @@ function classify_discharge_js(cfs){
 // midnight ends at 24:00 of its own labelled day. The observed roll-forward rule
 // must not leak in or every alert shifts a day.
 function parseScheduleBlocks(rows){
-  const out={};
+  const out={}, cover={};
   rows.forEach(r=>{
     const parts=String(r.Time).trim().split(/\s+/), tz=parts.pop();
     const [aa,bb]=parts.join(" ").split("-").map(x=>x.trim());
     const A=tvaClock(aa+" "+tz), B=tvaClock(bb+" "+tz);
     const sH=A.h, eH=B.mid?24:B.h;
     if(eH<=sH) return;
+    // Coverage is recorded BEFORE the zero-generator rows get dropped below --
+    // "0 generators, 9 AM - 2 PM" is published information, not a gap.
+    const kk=isoOf(tvaDate(r.Day));
+    cover[kk]=Math.max(cover[kk]||0,eH);
     const g=String(r.Generators).trim().toLowerCase();
     const m=g.match(/^(\d+)\s*or\s*more$/);
     let lo,hi;
@@ -673,6 +705,9 @@ function parseScheduleBlocks(rows){
     const k=isoOf(tvaDate(r.Day));
     (out[k]=out[k]||[]).push([sH,eH,lo,hi]);
   });
+  // Only adopt the coverage map if the blocks are adopted too (applyData keeps the
+  // baked-in defaults when a parse comes back empty); the two must not disagree.
+  if(Object.keys(out).length) PUBLISHED_COVER=cover;
   return out;
 }
 const parseForecastRows=rows=>rows.map(r=>({d:isoOf(tvaDate(r.Day)),
@@ -835,7 +870,8 @@ const clock=h=>{if(h==null)return"—";h=((h%24)+24)%24;let H=Math.floor(h),m=Ma
 const dur=h=>{if(h==null)return"\u2014";let t=Math.round(h*60);const H=Math.floor(t/60);
   return (H?H+"h ":"")+(t-H*60)+"m";};
 
-const SRC_LABEL={observed:"observed record",published:"TVA published schedule",model:"modelled from guide curve"};
+const SRC_LABEL={observed:"observed record",published:"TVA published schedule",
+  "published+model":"TVA's posted hours, rest modelled",model:"modelled from guide curve"};
 const $=id=>document.getElementById(id);
 const TIP=()=>document.getElementById("tip");
 function hoverTip(node,title,rows){
