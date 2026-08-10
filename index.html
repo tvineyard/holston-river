@@ -110,6 +110,8 @@ input[type=range]::-moz-range-thumb{width:18px;height:18px;border-radius:50%;
   background:var(--surface-2);position:relative;overflow:hidden}
 .vbox::before{content:"";position:absolute;inset:0 auto 0 0;width:3px;background:var(--accent)}
 .vbox .vl{font-size:10px;text-transform:uppercase;letter-spacing:.12em;font-weight:720;color:var(--accent)}
+.vbox .vv small{font-size:.52em;font-weight:600;color:var(--text-secondary);letter-spacing:0}
+.vbox .vl{white-space:normal;line-height:1.35}
 .vbox .vv{font-size:34px;font-weight:680;letter-spacing:-.035em;margin-top:6px;line-height:1.05}
 .vbox.big .vv{font-size:44px}
 .vbox .vn{font-size:12.5px;margin-top:7px;color:var(--text-secondary);line-height:1.5}
@@ -132,6 +134,12 @@ tr.hi{background:var(--surface-2)}
 tr.hi td{font-weight:620}
 tr.hi td:first-child{box-shadow:inset 3px 0 0 var(--series-1)}
 
+.inline-ctl{display:flex;align-items:center;gap:14px;flex-wrap:wrap;
+  background:var(--surface-2);border-radius:12px;padding:11px 15px;margin:4px 0 14px}
+.inline-ctl label{font-size:12px;font-weight:600;color:var(--text-secondary);
+  text-transform:none;letter-spacing:0}
+.inline-ctl label b{color:var(--series-1);font-weight:700}
+.inline-ctl input[type=range]{flex:1 1 260px;min-width:200px}
 .legend{display:flex;gap:20px;flex-wrap:wrap;font-size:12px;color:var(--text-secondary);margin-top:15px}
 .legend span{display:inline-flex;align-items:center;gap:7px}
 .sw{width:10px;height:10px;border-radius:3px;flex:none}
@@ -219,6 +227,10 @@ code{background:var(--surface-2);padding:2px 6px;border-radius:5px;font-size:11.
   <div class="verdict" id="verdict"></div>
   <div class="stats" id="stats"></div>
   <div class="tip" id="tip"></div>
+  <div class="inline-ctl">
+    <label for="launch2">Drag to change your start time <b id="lt2"></b></label>
+    <input type="range" id="launch2" min="5" max="21" step="0.0833333">
+  </div>
   <svg id="trip" viewBox="0 0 1000 340" role="img" aria-label="Boat position against the release wave over time"></svg>
   <div class="legend">
     <span><i class="sw" style="background:var(--series-1)"></i>Wave front (water arrives)</span>
@@ -246,7 +258,7 @@ code{background:var(--surface-2);padding:2px 6px;border-radius:5px;font-size:11.
 <!-- ============ OUTLOOK ============ -->
 <div class="card">
   <div class="eyebrow"><h2>Ten-week outlook</h2></div>
-  <p class="h2sub">Days 1–3 are TVA's published flow forecast. Beyond that the operating guide's drawdown schedule sets how much water <em>has</em> to move, split by the weekday/weekend demand pattern.</p>
+  <p class="h2sub"><strong>The first three days are TVA's published flow forecast</strong> — real numbers. Nothing published anywhere goes further out than that, TVA or NOAA. Everything after is <strong>modelled</strong> from the operating guide's drawdown schedule and the weekday/weekend demand pattern: read it as a shape, not a number.</p>
   <svg id="outlook" viewBox="0 0 1000 300" role="img" aria-label="Predicted average daily outflow over ten weeks"></svg>
   <p class="note" id="outnote"></p>
 </div>
@@ -286,7 +298,7 @@ code{background:var(--surface-2);padding:2px 6px;border-radius:5px;font-size:11.
 </div>
 
 <div class="card">
-  <div class="eyebrow"><h2>Travel time from the dam</h2></div>
+  <div class="eyebrow"><h2>How long the water takes to reach each point</h2></div>
   <table id="tt"></table>
   <p class="note">Hours from generation start to first rise. Anchored on TVA river-forecasting guidance — 6–12 h at River Ranch, 18–30 h near Knoxville — with celerity scaling as Q<sup>0.66</sup>. The <strong>spread</strong> column is how much longer the release takes to pass than it took to leave — a 3-hour release at the dam is an 8-hour rise at your place, and a correspondingly smaller one. That is why a one-hour minimum-flow pulse arrives at Nances Ferry as ~810 cfs and floats nobody.</p>
 </div>
@@ -605,13 +617,18 @@ const tvaDate=d=>{const[mm,dd,yy]=String(d).split("/").map(Number);return new Da
 // Two traps: a standalone "Midnight" row carries the PREVIOUS day's date and must
 // roll forward, and the value labelled hour H is the average over the hour ENDING
 // at H (tailwater is already elevated at the top of the ramp hour).
+let CURRENT_ELEV=null, CURRENT_ELEV_AT=null;
 function parseObservedBlocks(rows){
   const S=rows.map(r=>{
     const {h,mid}=tvaClock(r.Time); const d=tvaDate(r.Day);
     if(mid) d.setDate(d.getDate()+1);
     d.setHours(h,0,0,0);
-    return {end:d, cfs:tvaNum(r.AverageHourlyDischarge)};
+    return {end:d, cfs:tvaNum(r.AverageHourlyDischarge),
+            elev:tvaNum(r.ReservoirElevation)};
   }).sort((a,b)=>a.end-b.end);
+  for(let i=S.length-1;i>=0;i--){
+    if(S[i].elev>500){ CURRENT_ELEV=S[i].elev; CURRENT_ELEV_AT=S[i].end; break; }
+  }
   const out={}; let run=null;
   const flush=()=>{ if(!run)return;
     const day=new Date(run.start); day.setHours(0,0,0,0);
@@ -664,14 +681,20 @@ const parseForecastRows=rows=>rows.map(r=>({d:isoOf(tvaDate(r.Day)),
 
 function parseGuideRows(payload){
   const items=payload.items||payload; if(!Array.isArray(items)) return null;
-  const pts=items.map(it=>{const d=tvaDate(it.Day);
-      return [Math.floor((d-new Date(d.getFullYear(),0,0))/864e5), tvaNum(it.GuideCurve)];})
-    .filter(p=>p[1]>500).sort((a,b)=>a[0]-b[0]);
-  if(pts.length<20) return null;
-  const thin=pts.filter((p,i)=>i%6===0||i===pts.length-1);
-  if(thin[0][0]>1) thin.unshift([1,thin[0][1]]);
-  if(thin[thin.length-1][0]<366) thin.push([366,thin[thin.length-1][1]]);
-  return thin;
+  const rows=items.map(it=>{const d=tvaDate(it.Day);
+      return {n:Math.floor((d-new Date(d.getFullYear(),0,0))/864e5),
+              g:tvaNum(it.GuideCurve),
+              lo:tvaNum(it.LowExptdElevRange), hi:tvaNum(it.UpperExptdEleRange)};})
+    .filter(r=>r.g>500).sort((a,b)=>a.n-b.n);
+  if(rows.length<20) return null;
+  const thin=rows.filter((r,i)=>i%6===0||i===rows.length-1);
+  const pad=a=>{ if(a[0][0]>1) a.unshift([1,a[0][1]]);
+                 if(a[a.length-1][0]<366) a.push([366,a[a.length-1][1]]); return a; };
+  // TVA publishes an expected elevation BAND alongside the guide curve. Keeping it
+  // is the difference between "the guide says X" and "TVA expects somewhere in X-Y".
+  // TVA also publishes Low/UpperExptdElevRange, but it spans ~10 ft this far out --
+  // converted to flow that is a range so wide it tells you nothing. Left unused.
+  return pad(thin.map(r=>[r.n,r.g]));
 }
 
 let DATA_STATE={live:false, at:null, fetchedAt:null, errors:[], source:null};
@@ -840,18 +863,47 @@ $("vstill").value=calibratedStill().toFixed(2);
 if(calibratedRun()) $("vrun").value=calibratedRun().toFixed(2);
 
 /* ─── outflow prediction for a date ─── */
+// How far off the guide curve the pool currently is.
+//
+// It does NOT drive a catch-up. Per years of watching this reservoir: TVA follows the
+// guide curve's SLOPE, not its level. In a year the lake never fills, they start the
+// seasonal drawdown on schedule anyway and simply never rejoin the curve — the gap
+// rides along all season. Modelling convergence would invent water that never comes.
+//
+// What the offset IS good for: surface area. A pool sitting 1.3 ft low has less
+// surface, so the same ft/day of drawdown moves slightly less water.
+function guideDeviationFt(){
+  if(CURRENT_ELEV==null) return 0;
+  return CURRENT_ELEV - interp(GUIDE, doy(TODAY));
+}
+// How much the off-curve pool actually moves the modelled numbers, stated plainly so
+// nobody has to guess whether the skew is doing real work or quietly inventing water.
+function skewPct(){
+  const n=doy(TODAY)+21;
+  const on=outflowFromCurve(GUIDE,n,0), off=outflowFromCurve(GUIDE,n,guideDeviationFt());
+  const p=(off-on)/on*100;
+  return (p>=0?"+":"−")+Math.abs(p).toFixed(1)+"%";
+}
+function outflowFromCurve(tbl,n,offsetFt){
+  const h=interp(tbl,n) + (offsetFt||0);      // where the pool will actually sit
+  const dH=(interp(tbl,Math.min(365,n+11))-interp(tbl,Math.max(1,n-11)))/22;
+  return Math.max(300, interp(SEASON_INFLOW,n) - dH*cfsPerFtDay(h));
+}
 function predictOutflow(date){
   const iso=isoOf(date);
   const f=FORECAST.find(x=>x.d===iso);
-  if(f) return {cfs:f.outflow, src:"TVA forecast", conf:"high"};
+  if(f) return {cfs:f.outflow, src:"TVA published forecast", conf:"high"};
   const n=doy(date), h=interp(GUIDE,n);
-  const dH=(interp(GUIDE,n+3)-interp(GUIDE,n-3))/6;      // ft/day, centred
-  const inflow=interp(SEASON_INFLOW,n);
-  let cfs=Math.max(400, inflow - dH*cfsPerFtDay(h));
-  const dow=date.getDay();
-  cfs*= (dow===0||dow===6)?0.72:1.12;                     // weekday power demand runs higher than weekend
+  const dow=date.getDay(), wk=(dow===0||dow===6)?0.72:1.12;  // weekdays carry more demand
+  // The guide curve's SLOPE sets the release. The current level only shifts the whole
+  // curve down (or up) so the surface area is right — never to close the gap.
+  const dev=guideDeviationFt();
+  const cfs=outflowFromCurve(GUIDE,n,dev)*wk;
+
   const ahead=Math.abs(date-TODAY)/864e5;
-  return {cfs:Math.round(cfs), src:"guide curve", conf: ahead<10?"medium":"low", elev:h};
+  return {cfs:Math.round(cfs), dev, elev:h,
+          src:"modelled from the operating guide",
+          conf: ahead<10?"medium":"low"};
 }
 
 /* ─── main render ─── */
@@ -859,7 +911,8 @@ function render(){
   const di=+$("day").value, date=days[di];
   const pi=+$("putin").value, ti=+$("takeout").value;
   const launch=+$("launch").value, vRun=+$("vrun").value, vStill=+$("vstill").value;
-  $("lt").textContent="· "+clock(launch);
+  $("lt").textContent="· "+clock(launch); $("lt2").textContent="· "+clock(launch);
+  if($("launch2").value!==$("launch").value) $("launch2").value=$("launch").value;
   const sun=sunTimes(date), pred=predictOutflow(date), sch=scheduleFor(date,pred.cfs);
   const put=PTS[pi], take=PTS[ti];
   const sim=(ti>pi)?simulate(put.rm,take.rm,launch,sch.blocks,vRun,vStill):null;
@@ -875,8 +928,12 @@ function render(){
   if(!sim){ box("Invalid","—","Take-out must be downstream of put-in","var(--critical)"); }
   else{
     const margin=sun.sunset-sim.arrive;
-    const v = margin>=0.75 ? ["GO","var(--good)"] : margin>=0 ? ["TIGHT","var(--warning)"] : ["NO","var(--critical)"];
-    box(v[0], clock(sim.arrive), (margin>=0?dur(margin)+" of daylight left":dur(-margin)+" past sunset")+
+    const v = margin>=0.75 ? ["Yes","var(--good)"]
+            : margin>=0    ? ["Tight","var(--warning)"]
+                           : ["No","var(--critical)"];
+    box("Should I go? Will I arrive before dark?",
+        `${v[0]} <small>out ${clock(sim.arrive)}</small>`,
+        (margin>=0?dur(margin)+" of daylight left":dur(-margin)+" past sunset")+
         " · sunset "+clock(sun.sunset), v[1], true);
     box("Float time", dur(sim.dur),
         Math.round(sim.runFrac*100)+"% of it on moving water", "var(--series-3)");
@@ -902,7 +959,8 @@ function render(){
   st("Predicted outflow", pred.cfs.toLocaleString()+" cfs", pred.src+" · "+pred.conf+" confidence");
   const sm=schedSummary(sch);
   const us=[...new Set(sch.blocks.filter(b=>b.u>0&&(b.e-b.s)>1.5).map(b=>b.u))].sort();
-  st("Generation", sm.hours?dur(sm.hours)+" @ "+(us.length>1?us[0]+"–"+us[us.length-1]:us[0]||1)+"u":"minimum flows",
+  const tn=us.length>1?us[0]+"–"+us[us.length-1]:(us[0]||1);
+  st("Generation", sm.hours?dur(sm.hours)+" · "+tn+" turbine"+(String(tn)==="1"?"":"s"):"minimum flows",
      sm.start!=null?("from "+clock(sm.start)+" · "+SRC_LABEL[sch.src]):SRC_LABEL[sch.src]);
   st("Usable water at "+put.n.split(" ")[0], head?clock(firstUse.s+head):"never",
      head?("~"+Math.round(effectiveCfs(UNIT_CFS[firstUse.u],firstUse.e-firstUse.s,_pm)).toLocaleString()
@@ -988,7 +1046,7 @@ function drawTrip(sim,sch,sun,launch,put,take,date){
       const pg=el("polygon",{points:poly.map(p=>p.join(",")).join(" "),fill:"url(#trip-g1)"});
       hoverTip(pg,"Water is up here",
         ["Everything inside this band has moving water",
-         b.u+" unit"+(b.u>1?"s":"")+" · "+UNIT_CFS[b.u].toLocaleString()+" cfs",
+         b.u+" turbine"+(b.u>1?"s":"")+" · "+UNIT_CFS[b.u].toLocaleString()+" cfs",
          "released "+clock(b.s)+" – "+clock(b.e)+" at the dam"]);
       s.appendChild(pg);}
     [[head,"var(--series-1)","Water arrives"],[tail,"var(--series-2)","Water drops"]]
@@ -996,7 +1054,7 @@ function drawTrip(sim,sch,sun,launch,put,take,date){
       if(a.length<2)return;
       const ln=el("polyline",{points:a.map(p=>p.join(",")).join(" "),fill:"none",stroke:c,
         "stroke-width":2.5,"stroke-linecap":"round","stroke-linejoin":"round"});
-      hoverTip(ln,lab,["Leading edge of the "+b.u+"-unit release",
+      hoverTip(ln,lab,["Leading edge of the "+b.u+"-turbine release",
         "moves "+cUpper(q).toFixed(2)+" mph upper reach, "+cLower(q).toFixed(2)+" mph below RM 27",
         "arrives as ~"+Math.round(effectiveCfs(q,b.e-b.s,milesBelow(take.rm))).toLocaleString()+" cfs at the take-out"]);
       s.appendChild(ln);});
@@ -1112,9 +1170,11 @@ function drawOutlook(){
     const hrs=x.p.cfs*24/UNIT_CFS[3];
     hoverTip(r,x.d.toLocaleDateString("en-US",{weekday:"long",month:"short",day:"numeric"}),
       [x.p.cfs.toLocaleString()+" cfs average outflow",
-       "≈ "+dur(hrs)+" of 3-unit generation",
-       x.p.src+" · "+x.p.conf+" confidence"]);
+       "≈ "+dur(hrs)+" of 3-turbine generation",
+       x.p.dev ? "pool running "+Math.abs(x.p.dev).toFixed(2)+" ft "+(x.p.dev<0?"below":"above")+" the curve" : "",
+       x.p.src].filter(Boolean));
     s.appendChild(r);
+
     if(x.d.getDate()===1||i===0){
       s.appendChild(el("line",{x1:X(i)-bw/2-2,x2:X(i)-bw/2-2,y1:Tp,y2:H-B,
         stroke:"var(--text-muted)","stroke-width":1}));
@@ -1131,8 +1191,16 @@ function drawOutlook(){
   s.appendChild(el("line",{x1:L,x2:W-R,y1:H-B,y2:H-B,stroke:"var(--rule)"}));
   const augAvg=avg(data.filter(x=>x.d.getMonth()===7).map(x=>x.p.cfs));
   const sepAvg=avg(data.filter(x=>x.d.getMonth()===8).map(x=>x.p.cfs));
-  $("outnote").innerHTML=`Bar opacity is confidence: solid for TVA's published three-day forecast, `+
-    `fading as the guide curve takes over. August averages <strong>${Math.round(augAvg).toLocaleString()} cfs</strong>; `+
+  $("outnote").innerHTML=`Solid bars are TVA's published three-day forecast; the faded ones are modelled. `+
+    `Nobody publishes river flow further out than three days — past that this is an inference from `+
+    `the pool's drawdown schedule, and it should be read as a shape, not a number.`+
+    (CURRENT_ELEV!=null ? ` The pool sits <strong>${CURRENT_ELEV.toFixed(2)} ft</strong>, `+
+      `${Math.abs(guideDeviationFt()).toFixed(2)} ft ${guideDeviationFt()<0?"below":"above"} the guide curve. `+
+      `That gap is carried forward, not closed — TVA follows the curve's slope, so in a `+
+      `year the lake never fills they draw down on schedule anyway and never rejoin it. `+
+      `The only thing the gap changes here is surface area: a lower pool moves slightly `+
+      `less water per foot of drawdown, which shades these bars by `+
+      `<strong>${skewPct()}</strong>. It is a nudge, not a forecast.` : "")+` August averages <strong>${Math.round(augAvg).toLocaleString()} cfs</strong>; `+
     `September averages <strong>${Math.round(sepAvg).toLocaleString()} cfs</strong> — the seasonal drawdown from `+
     `1069 ft down toward 1054 by mid-October has to move roughly 4,700 cfs of extra water every day, `+
     `on top of inflow. That is the difference between a river that runs six hours and one that runs most of the day. `+
@@ -1334,7 +1402,7 @@ function drawLegs(){
 function drawTT(){
   const t=$("tt");
   let h="<thead><tr><th>Point</th><th>RM</th><th>mi below dam</th>"+
-        "<th>1 unit</th><th>2 units</th><th>3 units</th><th>spread</th></tr></thead><tbody>";
+        "<th>1 turbine</th><th>2 turbines</th><th>3 turbines</th><th>spread</th></tr></thead><tbody>";
   PTS.slice(1).forEach(p=>{const m=milesBelow(p.rm);
     const c=[1,2,3].map(u=>travelH(m,UNIT_CFS[u]));
     const stretch=spreadH(m);
@@ -1345,6 +1413,14 @@ function drawTT(){
   t.innerHTML=h+"</tbody>";
 }
 
+// two handles, one value -- the chart slider and the header slider stay in step
+function syncLaunch(from,to){
+  $(to).value=$(from).value;
+  $("lt").textContent="· "+clock(+$(from).value);
+  $("lt2").textContent="· "+clock(+$(from).value);
+}
+$("launch2").addEventListener("input",()=>{ syncLaunch("launch2","launch");
+  render(); drawMap(); });
 ["day","putin","takeout","launch","vrun","vstill"].forEach(id=>{
   $(id).addEventListener("input",()=>{render();drawMap();drawLegs();});});
 $("mapTime").addEventListener("input",drawMap);
