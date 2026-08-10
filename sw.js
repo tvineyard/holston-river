@@ -2,7 +2,7 @@
    Shell is cache-first so the app opens instantly and works with no signal.
    TVA data is stale-while-revalidate: you always get the last good numbers
    immediately, and they refresh in the background when there is a connection. */
-const VERSION = "holston-v2";
+const VERSION = "holston-v3";
 const SHELL   = VERSION + "-shell";
 const DATA    = VERSION + "-data";
 const ASSETS = ["./", "./index.html", "./manifest.webmanifest",
@@ -26,6 +26,11 @@ self.addEventListener("fetch", e => {
   const { request } = e;
   if (request.method !== "GET") return;
   const url = new URL(request.url);
+
+  // Third-party calls (the weather API) go straight to the network. The worker has
+  // no business caching someone else's forecast, and an opaque cached copy would be
+  // worse than no forecast at all.
+  if (url.origin !== location.origin) return;
 
   // Data: serve what we have, refresh behind it. A failed refresh is not an error —
   // it just means you keep yesterday's numbers instead of an empty screen.

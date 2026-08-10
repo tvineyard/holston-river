@@ -143,6 +143,16 @@ tr.hi td:first-child{box-shadow:inset 3px 0 0 var(--series-1)}
 .legend{display:flex;gap:20px;flex-wrap:wrap;font-size:12px;color:var(--text-secondary);margin-top:15px}
 .legend span{display:inline-flex;align-items:center;gap:7px}
 .sw{width:10px;height:10px;border-radius:3px;flex:none}
+/* iPhone has no install prompt -- Apple never shipped one -- so the app has to
+   explain the Share > Add to Home Screen path itself. */
+.ios-hint{display:none;align-items:flex-start;gap:12px;margin:0 0 16px;padding:14px 16px;
+  border:1px solid var(--rule);border-left:3px solid var(--accent-1);border-radius:13px;
+  background:var(--surface-2);font-size:13.5px;line-height:1.6;color:var(--text-secondary)}
+.ios-hint.on{display:flex}
+.ios-hint b{color:var(--text-primary);font-weight:640}
+.ios-hint .x{margin-left:auto;flex:none;background:none;border:0;cursor:pointer;
+  color:var(--text-muted);font-size:17px;line-height:1;padding:2px 4px}
+.ios-share{display:inline-block;vertical-align:-3px;width:15px;height:15px}
 .note{font-size:13px;color:var(--text-secondary);margin:16px 0 0;line-height:1.65;max-width:88ch}
 .note strong{color:var(--text-primary);font-weight:620}
 svg{display:block;width:100%;height:auto}
@@ -209,6 +219,17 @@ code{background:var(--surface-2);padding:2px 6px;border-radius:5px;font-size:11.
     <button id="theme">Theme</button>
   </div>
 </header>
+
+<div class="ios-hint" id="ioshint">
+  <div><b>Put it on your home screen.</b> Tap the Share button
+    <svg class="ios-share" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+         stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+         aria-label="Share"><path d="M12 15V3"/><path d="M8 7l4-4 4 4"/>
+      <path d="M5 12v7a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-7"/></svg>
+    at the bottom of Safari, then <b>Add to Home Screen</b>. It gets its own icon and
+    opens full screen — and it still works with no signal, on the last numbers it pulled.</div>
+  <button class="x" id="ioshintx" aria-label="Dismiss">✕</button>
+</div>
 
 <!-- ============ PLANNER ============ -->
 <div class="card hero">
@@ -784,6 +805,35 @@ function applyData(d){
 
 const STALE_MIN=20;   // older than this on load and we go straight to TVA
 
+/* ─── weather ───
+ * Open-Meteo, 16 days, no key, CORS-enabled (NWS blocks this origin). Grid point is
+ * the same lat/lon the sun math uses, which is the stretch of river being floated --
+ * near enough to Blaine that a county forecast would say the same thing.
+ * Client-side on purpose: it is nobody's system of record and it must never be able
+ * to hold up the river data, so a failure just blanks the tile.
+ */
+let WX=null;
+const WX_URL="https://api.open-meteo.com/v1/forecast?latitude="+LAT+"&longitude="+LON+
+  "&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,"+
+  "wind_speed_10m_max&temperature_unit=fahrenheit&wind_speed_unit=mph"+
+  "&timezone=America%2FNew_York&forecast_days=16";
+// WMO codes, collapsed to what actually changes a float decision.
+const WMO={0:"clear",1:"mostly clear",2:"partly cloudy",3:"overcast",45:"fog",48:"fog",
+  51:"drizzle",53:"drizzle",55:"drizzle",56:"freezing drizzle",57:"freezing drizzle",
+  61:"light rain",63:"rain",65:"heavy rain",66:"freezing rain",67:"freezing rain",
+  71:"light snow",73:"snow",75:"heavy snow",77:"snow",80:"scattered showers",
+  81:"showers",82:"heavy showers",85:"snow showers",86:"snow showers",
+  95:"thunderstorms",96:"thunderstorms",99:"thunderstorms"};
+async function readWeather(){
+  const r=await fetch(WX_URL,{cache:"no-store"});
+  if(!r.ok) throw new Error("HTTP "+r.status);
+  const j=await r.json(), d=j.daily, out={};
+  d.time.forEach((t,i)=>{ out[t]={c:d.weather_code[i], hi:d.temperature_2m_max[i],
+    lo:d.temperature_2m_min[i], p:d.precipitation_probability_max[i],
+    w:d.wind_speed_10m_max[i]}; });
+  WX=out;
+}
+
 async function hydrate(opts){
   opts=opts||{};
   let d=null, source=null, errs=[];
@@ -1010,6 +1060,12 @@ function render(){
          :"every release flattens out before it gets here");
   st("Distance", (put.rm-take.rm).toFixed(2)+" mi", put.n+" → "+take.n);
   st("Daylight", clock(sun.sunrise)+" – "+clock(sun.sunset), "dusk "+clock(sun.dusk));
+  const wx=WX&&WX[isoOf(date)];
+  st("Weather",
+     wx?Math.round(wx.hi)+"° / "+Math.round(wx.lo)+"°":"—",
+     wx?[WMO[wx.c]||"—", wx.p!=null?wx.p+"% rain":null,
+         wx.w!=null?Math.round(wx.w)+" mph wind":null].filter(Boolean).join(" · ")
+       :(WX?"further out than the forecast goes":"forecast unavailable"));
 
   drawTrip(sim,sch,sun,launch,put,take,date);
   drawScan(date,pi,ti,sch,sun,vRun,vStill);
@@ -1508,6 +1564,12 @@ $("fresh").addEventListener("keydown",e=>{
 document.addEventListener("visibilitychange",()=>{
   if(document.visibilityState==="visible") hydrate().catch(()=>{});});
 
+// Weather rides along, but never in front: it re-renders when it lands and is
+// silently dropped if it doesn't.
+readWeather().then(render).catch(()=>{});
+document.addEventListener("visibilitychange",()=>{
+  if(document.visibilityState==="visible") readWeather().then(render).catch(()=>{});});
+
 addEventListener("online",()=>{paintFreshness();hydrate().catch(()=>{});});
 addEventListener("offline",paintFreshness);
 
@@ -1522,10 +1584,30 @@ if("serviceWorker" in navigator){
 let deferredPrompt=null;
 addEventListener("beforeinstallprompt",e=>{
   e.preventDefault(); deferredPrompt=e; $("install").style.display="inline-block";});
+
+// iOS has no beforeinstallprompt and no programmatic install -- Apple has never
+// shipped one. Safari's Share > Add to Home Screen is the only path, so on iPhone
+// the Install button opens directions instead of a prompt that cannot exist.
+const IS_IOS = /iP(hone|ad|od)/.test(navigator.platform||"") ||
+  (/Mac/.test(navigator.userAgent) && "ontouchend" in document);
+const INSTALLED = navigator.standalone===true ||
+  matchMedia("(display-mode: standalone)").matches;
+const seen=()=>{try{return localStorage.getItem("ioshint")==="1";}catch{return false;}};
+const markSeen=()=>{try{localStorage.setItem("ioshint","1");}catch{}};
+
+if(IS_IOS && !INSTALLED){
+  $("install").style.display="inline-block";
+  if(!seen()) $("ioshint").classList.add("on");     // once, then only on request
+}
+$("ioshintx").onclick=()=>{$("ioshint").classList.remove("on"); markSeen();};
 $("install").onclick=async()=>{
-  if(!deferredPrompt)return;
+  if(!deferredPrompt){
+    if(IS_IOS) $("ioshint").classList.toggle("on");
+    return;
+  }
   deferredPrompt.prompt(); await deferredPrompt.userChoice;
   deferredPrompt=null; $("install").style.display="none";};
-addEventListener("appinstalled",()=>{$("install").style.display="none";});
+addEventListener("appinstalled",()=>{
+  $("install").style.display="none"; $("ioshint").classList.remove("on");});
 </script>
 </body></html>
