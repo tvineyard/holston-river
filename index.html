@@ -193,8 +193,8 @@ code{background:var(--surface-2);padding:2px 6px;border-radius:5px;font-size:11.
   </div>
   <div class="hdr-right">
     <span class="badge" id="fresh" role="button" tabindex="0"
-          title="Click to check for new river data"><i></i>Loading…</span>
-    <button id="refresh" title="Check for new river data" aria-label="Check for new river data">
+          title="Click to read the latest straight from TVA"><i></i>Loading…</span>
+    <button id="refresh" title="Read the latest straight from TVA" aria-label="Read the latest from TVA">
       <svg viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/></svg>
     </button>
     <button id="install">Install</button>
@@ -583,7 +583,7 @@ const RIVER=(()=>{
 // TVA's RestApi sends no CORS headers -- a browser fetch straight to tva.com fails
 // with "Failed to fetch". Everything TVA goes through the proxy in functions/.
 // NOAA NWPS and USGS do send CORS and could be called direct.
-const API=(window.HOLSTON_API||null);
+
 
 const tvaNum=v=>{ if(v==null)return null;
   if(typeof v==="number")return v;
@@ -674,43 +674,88 @@ function parseGuideRows(payload){
   return thin;
 }
 
-let DATA_STATE={live:false, at:null, fetchedAt:null, errors:[]};
+let DATA_STATE={live:false, at:null, fetchedAt:null, errors:[], source:null};
 
-// Data comes from data/tva.json, refreshed by a scheduled GitHub Action. The app
-// makes ONE same-origin request for a static file -- no proxy, no server, nothing
-// that bills per request. (Set window.HOLSTON_API to use a live proxy instead.)
-async function hydrate(){
+// TVA sends no CORS headers -- but its ServiceStack backend DOES answer JSONP.
+// A <script> tag isn't subject to CORS, so the browser can read TVA directly with
+// no proxy and no server. Verified against all four endpoints.
+const TVA_DIRECT="https://www.tva.com/RestApi";
+let jsonpSeq=0;
+function jsonp(endpoint, timeoutMs=15000){
+  return new Promise((resolve,reject)=>{
+    const cb="__tva"+(++jsonpSeq)+"_"+Math.floor(Math.random()*1e6);
+    const s=document.createElement("script");
+    let done=false;
+    const cleanup=()=>{ try{delete window[cb];}catch(e){window[cb]=undefined;} s.remove(); };
+    window[cb]=d=>{ done=true; cleanup(); resolve(d); };
+    s.onerror=()=>{ if(!done){done=true;cleanup();reject(new Error(endpoint+": unreachable"));} };
+    s.src=TVA_DIRECT+"/"+endpoint+"/CRKT1?format=json&callback="+cb;
+    document.head.appendChild(s);
+    setTimeout(()=>{ if(!done){done=true;cleanup();reject(new Error(endpoint+": timed out"));} },timeoutMs);
+  });
+}
+
+// Straight from TVA, right now.
+async function readLive(){
+  const [observed,schedule,forecast,guide]=await Promise.all([
+    jsonp("observed-data-48-hours"), jsonp("generation-releases"),
+    jsonp("predicted-data"),         jsonp("operating-guide")]);
+  return {fetchedAt:new Date().toISOString(), errors:[], observed, schedule, forecast, guide};
+}
+
+// The published file the scheduled job writes. Instant, works offline, and is what
+// the app opens with -- live reads are an upgrade on top, not a dependency.
+async function readCached(){
+  const r=await fetch("./data/tva.json?t="+Date.now(),{cache:"no-store"});
+  if(!r.ok) throw new Error("data/tva.json HTTP "+r.status);
+  return r.json();
+}
+
+function applyData(d){
   const errs=[];
-  try{
-    const url = API ? null : "./data/tva.json?t="+Date.now();
-    let d;
-    if(url){
-      const r=await fetch(url,{cache:"no-store"});
-      if(!r.ok) throw new Error("data/tva.json HTTP "+r.status);
-      d=await r.json();
-    } else {
-      const get=async ep=>{const r=await fetch(`${API}/${ep}/CRKT1`,{cache:"no-store"});
-        if(!r.ok) throw new Error(ep+" HTTP "+r.status); return r.json();};
-      const [o,sc,f,g]=await Promise.all([get("observed-data-48-hours"),
-        get("generation-releases"),get("predicted-data"),get("operating-guide")]);
-      d={fetchedAt:new Date().toISOString(),observed:o,schedule:sc,forecast:f,guide:g};
-    }
-    const use=(name,val,fn)=>{ if(!val){errs.push(name+": missing");return;}
-      try{ fn(val); }catch(e){ errs.push(name+": "+e.message); } };
-    use("observed",d.observed,v=>{const b=parseObservedBlocks(v);
-      if(Object.keys(b).length) OBSERVED_BLOCKS=b;});
-    use("schedule",d.schedule,v=>{const b=parseScheduleBlocks(v);
-      if(Object.keys(b).length) PUBLISHED_BLOCKS=b;});
-    use("forecast",d.forecast,v=>{const f=parseForecastRows(v); if(f.length) FORECAST=f;});
-    use("guide",d.guide,v=>{const g=parseGuideRows(v); if(g) GUIDE=g;});
+  const use=(name,val,fn)=>{ if(!val){errs.push(name+": missing");return;}
+    try{ fn(val); }catch(e){ errs.push(name+": "+e.message); } };
+  use("observed",d.observed,v=>{const b=parseObservedBlocks(v);
+    if(Object.keys(b).length) OBSERVED_BLOCKS=b;});
+  use("schedule",d.schedule,v=>{const b=parseScheduleBlocks(v);
+    if(Object.keys(b).length) PUBLISHED_BLOCKS=b;});
+  use("forecast",d.forecast,v=>{const f=parseForecastRows(v); if(f.length) FORECAST=f;});
+  use("guide",d.guide,v=>{const g=parseGuideRows(v); if(g) GUIDE=g;});
+  return errs;
+}
 
-    DATA_STATE={live:errs.length<4, at:new Date(),
-                fetchedAt:d.fetchedAt?new Date(d.fetchedAt):null, errors:errs};
-  }catch(e){
-    DATA_STATE={live:false, at:new Date(), fetchedAt:null, errors:[String(e.message||e)]};
+const STALE_MIN=20;   // older than this on load and we go straight to TVA
+
+async function hydrate(opts){
+  opts=opts||{};
+  let d=null, source=null, errs=[];
+
+  if(opts.live){
+    try{ d=await readLive(); source="live"; }
+    catch(e){ errs.push("live read failed: "+e.message); }
   }
+  if(!d){
+    try{ d=await readCached(); source="file"; }
+    catch(e){ errs.push(String(e.message||e)); }
+  }
+  if(!d){
+    DATA_STATE={live:false,at:new Date(),fetchedAt:null,errors:errs,source:null};
+    paintFreshness(); return DATA_STATE;
+  }
+
+  errs=errs.concat(applyData(d));
+  DATA_STATE={live:errs.length<4, at:new Date(),
+              fetchedAt:d.fetchedAt?new Date(d.fetchedAt):null,
+              errors:errs, source};
   paintFreshness();
   if(DATA_STATE.live){ render(); drawOutlook(); drawSeason(); drawMap(); drawLegs(); drawTT(); }
+
+  // Opened with a file that's gone stale? Quietly go get the real thing.
+  if(!opts.live && source==="file" && DATA_STATE.fetchedAt){
+    const mins=(Date.now()-DATA_STATE.fetchedAt)/60000;
+    if(mins>STALE_MIN) hydrate({live:true}).catch(()=>{});
+  }
+  return DATA_STATE;
 }
 
 function paintFreshness(){
@@ -722,8 +767,6 @@ function paintFreshness(){
     el.title=s.errors.join("\n")||"Could not load river data";
     return;
   }
-  // Show when TVA was actually read, not when the browser loaded the file --
-  // the file can be up to half an hour old and pretending otherwise is a lie.
   const when=s.fetchedAt||s.at;
   const mins=Math.round((Date.now()-when)/60000);
   const t=when.toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit"});
@@ -732,7 +775,10 @@ function paintFreshness(){
   el.innerHTML=`<i></i>`+(mins<2?"Updated just now":`Updated ${t}`)+
     (stale?` · ${Math.floor(mins/60)}h old`:"")+
     (s.errors.length?` · ${s.errors.length} feed(s) stale`:"");
-  el.title=(s.errors.join("\n")||"River data read from TVA at "+when.toLocaleString());
+  el.title=(s.source==="live"
+      ? "Read straight from TVA at "+when.toLocaleString()
+      : "From the published file, last read from TVA at "+when.toLocaleString())+
+    (s.errors.length?"\n\n"+s.errors.join("\n"):"");
 }
 
 /* ═══════════ UI ═══════════ */
@@ -1321,22 +1367,22 @@ async function manualRefresh(){
   REFRESHING=true;
   const btn=$("refresh"), el=$("fresh");
   if(btn) btn.dataset.busy="1";
-  const before=DATA_STATE.fetchedAt ? +DATA_STATE.fetchedAt : null;
-  el.className="badge"; el.innerHTML='<i></i>Checking…';
-  try{ await hydrate(); }catch(e){ /* hydrate paints its own failure */ }
-  const after=DATA_STATE.fetchedAt ? +DATA_STATE.fetchedAt : null;
+  el.className="badge"; el.innerHTML='<i></i>Reading TVA…';
+  try{ await hydrate({live:true}); }catch(e){ /* hydrate paints its own failure */ }
   if(btn) btn.dataset.busy="0";
   REFRESHING=false;
-  if(before && after && before===after){
-    const t=new Date(after).toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit"});
+  if(DATA_STATE.source==="live"){
+    el.className="badge ok";
+    el.innerHTML='<i></i>Live from TVA';
+    setTimeout(paintFreshness,2500);
+  } else if(DATA_STATE.live){
     el.className="badge warn";
-    el.innerHTML=`<i></i>No new reading · still ${t}`;
-    el.title="The site refreshed, but TVA has not been re-read since "+t+
-             ". The job runs at :07, :22, :37 and :52.";
+    el.innerHTML='<i></i>TVA unreachable · using last saved';
     setTimeout(paintFreshness,4000);
   }
 }
 $("refresh").addEventListener("click",manualRefresh);
+$("refresh").title="Read the latest straight from TVA";
 $("fresh").addEventListener("click",manualRefresh);
 $("fresh").addEventListener("keydown",e=>{
   if(e.key==="Enter"||e.key===" "){e.preventDefault();manualRefresh();}});
