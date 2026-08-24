@@ -1146,7 +1146,12 @@ PTS.forEach((p,i)=>{
   $("takeout").appendChild(new Option(p.n+"  ·  RM "+p.rm.toFixed(2),i));});
 days.forEach((d,i)=>$("day").appendChild(new Option(
   fmtD(d)+(i===TODAY_IDX?"  ·  today":i<TODAY_IDX?"  ·  past":""),i)));
-$("putin").value=2; $("takeout").value=3; $("day").value=TODAY_IDX; $("launch").value=15;
+// Defaults by KEY, never by index. Nances Ferry -> River Ranch is THE float; adding a
+// landmark upstream of it must not quietly move the default put-in (adding River Mist
+// did exactly that).
+const idxOf=k=>{const i=PTS.findIndex(p=>p.k===k); return i<0?0:i;};
+$("putin").value=idxOf("nances"); $("takeout").value=idxOf("home");
+$("day").value=TODAY_IDX; $("launch").value=15;
 // Defaults come from the logged floats. A value the user has typed in Settings
 // outranks them -- it is their boat and their arms.
 $("vstill").value=calibratedStill().toFixed(2);
