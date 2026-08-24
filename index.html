@@ -379,6 +379,9 @@ const DAM=52.3;
 const PTS=[
  {k:"dam",  rm:52.3, n:"Cherokee Dam"},
  {k:"indian",rm:39.99,n:"Indian Cave Park"},
+ // River Mist sits on a peninsula with a launch on either side. This is the upstream
+ // one -- the one Tyler can actually use -- between mile 39 and 38.
+ {k:"mist",  rm:38.5, n:"First Launch (River Mist)"},
  {k:"nances",rm:33.24,n:"Nances Ferry"},
  {k:"home", rm:27.0, n:"River Ranch"},
  {k:"straw",rm:22.0, n:"Strawberry Plains ≈"},
@@ -415,14 +418,20 @@ const MEASURED=[
   {d:"2026-08-08",put:"nances",take:"home",launch:16.833,out:20.167,wet:false,
    note:"easy pace, two short stops, water never caught us"},
 
-  // 08/23 -- the first float logged on running water, and the one that showed the
-  // flow model is wrong. Steady easy paddling throughout, ~5 min off the current at
-  // Beaver Creek. TVA ran 1 unit 6a-noon, 2 units noon-2p, 3 units 2p-10p, so the
-  // river was RISING behind him all afternoon.
+  // 08/23 -- the first float logged on running water. Steady easy paddling throughout,
+  // ~5 min off the current at Beaver Creek.
   //   Nances -> Beaver Creek (RM 30.5)  2.74 mi in 42 min = 3.91 mph
   //   Beaver Creek -> home              3.50 mi in 75 min = 2.80 mph
-  // Same effort, same boat, 40% slower on the second half: he outran the front and
-  // floated into water that had not come up yet.
+  //
+  // TVA POSTED "2 or more, 6 AM - Midnight" for this day. Measured throughput was
+  // ~3,900 cfs until noon, ~7,600 through 1-2 PM, ~11,200 from 3 PM on -- i.e. the
+  // posting over-promised the morning by a full unit, same as 08/08 did. The unit
+  // labels here are inferred from throughput, not from what TVA posted.
+  //
+  // WHY THE SECOND HALF IS SLOWER -- from Tyler, who was in the boat: the river below
+  // Beaver Creek gets wider and deeper for a stretch, so the same water moves slower
+  // through it. The water was up the whole float; nobody outran anything. An earlier
+  // note here claimed he outran the front. That was my inference and it was wrong.
   //
   // calibrate:false ON PURPOSE. Fitting the running-water speed to this float with
   // the current flow model demands a ~10 mph paddler, which means the error is in
@@ -434,7 +443,7 @@ const MEASURED=[
          {at:"beaver creek",rm:30.5,t:18.11667,stop:5/60},
          {at:"home",rm:27.00,t:19.45}],
    dam:[[0,1,1],[6,12,1],[12,14,2],[14,22,3],[22,23,2],[23,24,1]],
-   note:"steady easy paddling; model said 2h26m, actual 2h02m"}
+   note:"steady easy paddling, water up the whole way; model said 2h26m, actual 2h02m"}
 ];
 
 // The still-water speed is DERIVED from the logged floats, not typed in. Add a trip
@@ -715,6 +724,25 @@ function waterOn(x,t,blocks){
 }
 // Boat speed scales with how much rise actually reaches you. A marginal bump does
 // not push you along like a two-unit release does.
+// FIELD NOTES -- observations from the boat that this function does NOT yet model.
+// Recorded here because they are the two candidate fixes, and the next float with
+// intermediate splits should separate them:
+//
+//   1. REACH GEOMETRY. Below Beaver Creek (RM 30.5) the river widens and deepens for
+//      a stretch, so the same discharge moves slower through it. Speed here depends
+//      only on how much water is under you, never on WHERE you are -- yet 08/23 ran
+//      3.91 mph above Beaver Creek and 2.80 below it on the same water and the same
+//      effort. A single reach factor of ~1.4 fits both logged floats, but with one
+//      ratio and two float times that is exactly determined -- it fits, it is not
+//      yet tested.
+//
+//   2. PADDLING IS MORE EFFECTIVE ON MOVING WATER. Tyler's read: you keep speed more
+//      easily when the river is up, so his speed THROUGH the water is higher too --
+//      not just his speed over the ground. This function assumes the paddler is a
+//      constant and only the current changes, which would understate a running day.
+//
+// Both push the same direction on 08/23, which is why one float cannot tell them
+// apart. Do not "fix" this by tuning vRun -- see the calibrate:false note above.
 function boatSpeed(eff,vRun,vStill){
   if(!eff) return vStill;
   return vStill+(vRun-vStill)*Math.min(1,eff/UNIT_CFS[2]);
