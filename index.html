@@ -443,8 +443,44 @@ const MEASURED=[
          {at:"beaver creek",rm:30.5,t:18.11667,stop:5/60},
          {at:"home",rm:27.00,t:19.45}],
    dam:[[0,1,1],[6,12,1],[12,14,2],[14,22,3],[22,23,2],[23,24,1]],
-   note:"steady easy paddling, water up the whole way; model said 2h26m, actual 2h02m"}
+   note:"steady easy paddling, water up the whole way; model said 2h26m, actual 2h02m"},
+
+  // 08/30 -- THE CALIBRATION FLOAT. Everything 08/23 lacked:
+  //   * TVA held a FLAT 3-unit release, ~11,150 cfs, 10 AM to 6 PM at the dam.
+  //   * That front reached Nances about 2:30 PM and the house about 4 PM, so the whole
+  //     reach was at full steady flow roughly three hours before he put in. No ramp,
+  //     no front to chase, nothing to route.
+  //   * No stops.
+  // 6.24 mi (centreline) in 1h39m = 3.78 mph over the ground.
+  //
+  // This is the first float that can honestly set the running-water speed, which until
+  // now was a number I picked out of the air (4.2) and nothing had ever tested.
+  //
+  // DISTANCE: he went LEFT of every island and measured the route at 6.70 mi against a
+  // 6.24 mi main-channel centreline -- 7.4% further. That is real time on the water,
+  // and without `dist` here the model would bury it inside the paddling speed.
+  {d:"2026-08-30",put:"nances",take:"home",launch:17.51667,out:19.16667,wet:true,
+   stop:0, calibrate:true, route:"left of every island", dist:6.70,
+   dam:[[0,1,2],[1,2,1],[5,8,1],[8,10,2],[10,18,3],[18,24,2]],
+   note:"flat 3-unit release all afternoon, steady water, no stops"}
 ];
+
+// How much further the water actually carries you than the centreline says. Tyler runs
+// LEFT of every island; on 08/30 he measured 6.70 mi against a 6.24 mi centreline. The
+// river geometry in this file is the main channel only -- side channels around islands
+// are not in it -- so every distance the app computes is short for that route.
+//
+// Speeds below are TRUE speeds through the water. simulate() divides by this to get
+// progress along the centreline, which is the axis everything else is measured on.
+// Without it the extra 7% hides inside the paddling speed, and the model looks like it
+// knows how fast you paddle when really it only knows how long your trip took.
+function routeFactor(){
+  const f=MEASURED.filter(m=>m.dist).map(m=>{
+    const put=PTS.find(p=>p.k===m.put), take=PTS.find(p=>p.k===m.take);
+    return (put&&take) ? m.dist/(put.rm-take.rm) : null;}).filter(Boolean);
+  return f.length ? f.reduce((a,b)=>a+b,0)/f.length : 1;
+}
+const ROUTE=routeFactor();
 
 // The still-water speed is DERIVED from the logged floats, not typed in. Add a trip
 // to MEASURED and the whole model re-centres on it.
@@ -453,18 +489,39 @@ function calibratedStill(){
   if(!dead.length) return 1.9;
   const sp=dead.map(m=>{
     const put=PTS.find(p=>p.k===m.put), take=PTS.find(p=>p.k===m.take);
-    return (put.rm-take.rm)/(m.out-m.launch);});
+    // m.dist when it was measured, otherwise the centreline scaled to his usual route
+    const d=m.dist || (put.rm-take.rm)*ROUTE;
+    return d/((m.out-m.launch)-(m.stop||0));});
   return sp.reduce((a,b)=>a+b,0)/sp.length;
+}
+// Solve for the running-water speed by INVERTING the simulator against a logged float,
+// rather than dividing distance by time. The difference matters: a float can be on
+// water that is strong but not quite saturating -- 08/30 ran ~7,550 cfs effective at
+// Nances and ~6,830 by the house -- so the ground speed you achieved is a little below
+// the speed the model should use at full water. Dividing would quietly under-set it.
+function fitRun(m){
+  const put=PTS.find(p=>p.k===m.put), take=PTS.find(p=>p.k===m.take);
+  const moving=(m.out-m.launch)-(m.stop||0);
+  if(!(put&&take&&moving>0)) return null;
+  if(!m.dam) return (put.rm-take.rm)/moving;          // no record of the day: divide
+  const blocks=m.dam.map(b=>({s:b[0],e:b[1],u:b[2]}));
+  const still=calibratedStill();
+  let lo=still, hi=12;                                 // bisect on vRun
+  for(let i=0;i<60;i++){
+    const mid=(lo+hi)/2;
+    const sim=simulate(put.rm,take.rm,m.launch,blocks,mid,still);
+    if(!sim) return null;
+    if(sim.dur>moving) lo=mid; else hi=mid;            // too slow -> need more speed
+  }
+  return (lo+hi)/2;
 }
 function calibratedRun(){
   // Only floats marked usable. A wet float whose legs the flow model cannot
   // reproduce tells you the flow model is broken -- it does not tell you how fast
   // the boat goes, and averaging it in would quietly make every prediction worse.
   const wet=MEASURED.filter(m=>m.wet && m.calibrate!==false);
-  if(!wet.length) return null;               // nothing usable has tested this yet
-  const sp=wet.map(m=>{
-    const put=PTS.find(p=>p.k===m.put), take=PTS.find(p=>p.k===m.take);
-    return (put.rm-take.rm)/((m.out-m.launch)-(m.stop||0));});
+  const sp=wet.map(fitRun).filter(v=>v!=null && isFinite(v));
+  if(!sp.length) return null;                // nothing usable has tested this yet
   return sp.reduce((a,b)=>a+b,0)/sp.length;
 }
 
@@ -762,7 +819,7 @@ function simulate(putRM,takeRM,launch,blocks,vRun,vStill){
     if(!on) dry=1;
     if(on&&!caught&&!wetAtLaunch&&dry) caught=[t,x];
     const v=boatSpeed(on,vRun,vStill);
-    x+=v*dt; t+=dt; tot+=dt; if(on)runMin+=dt;
+    x+=(v/ROUTE)*dt; t+=dt; tot+=dt; if(on)runMin+=dt;   // ROUTE: see routeFactor()
     track.push([t,x]);
   }
   return {arrive:t, dur:t-launch, track, caught, runFrac:tot?runMin/tot:0,
@@ -1789,7 +1846,10 @@ function setNote(){
     `<strong>${s.toFixed(2)} mph</strong>. One turbine lands in between, about `+
     `<strong>${one.toFixed(2)} mph</strong> — and slower than that well downstream, `+
     `where a short release has spread out and lost its push. Set these from a float `+
-    `you have actually timed; every travel time in the app re-centres on them.`;
+    `you have actually timed; every travel time in the app re-centres on them. `+
+    `They are speeds through the water on the route you actually paddle -- left of the `+
+    `islands, which measured <strong>${(ROUTE*100-100).toFixed(0)}%</strong> further `+
+    `than the map's centreline.`;
 }
 ["vrun","vstill"].forEach(id=>$(id).addEventListener("input",()=>{
   setNote();
