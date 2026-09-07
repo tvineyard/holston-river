@@ -462,7 +462,24 @@ const MEASURED=[
   {d:"2026-08-30",put:"nances",take:"home",launch:17.51667,out:19.16667,wet:true,
    stop:0, calibrate:true, route:"left of every island", dist:6.70,
    dam:[[0,1,2],[1,2,1],[5,8,1],[8,10,2],[10,18,3],[18,24,2]],
-   note:"flat 3-unit release all afternoon, steady water, no stops"}
+   note:"flat 3-unit release all afternoon, steady water, no stops"},
+
+  // 09/06 -- FAMILY FLOAT, and the float that exposed the 13,300 cfs bug.
+  // Tandem kayak: Tyler + wife + two kids, with the 7- and 11-year-old paddling
+  // alongside. Just floating, not pushing. 6.70 mi route in 2h00m = 3.35 mph.
+  //
+  // TVA held ~13,300 cfs flat from 1 PM to 9 PM -- the strongest sustained water in
+  // anything logged here, and well above three units' nameplate. This is what proved
+  // the old classifier wrong: it read every one of those hours as no generation.
+  //
+  // calibrate:false -- DIFFERENT BOAT AND CREW. 3.35 mph here is a loaded tandem with
+  // children aboard, not Tyler's paddling speed. Averaging it into the solo fit would
+  // slow every prediction he actually uses. Kept because a family-pace number is worth
+  // having on its own the day the app learns to plan for more than one kind of trip.
+  {d:"2026-09-06",put:"nances",take:"home",launch:16.75,out:18.75,wet:true,
+   stop:0, calibrate:false, dist:6.70, crew:"tandem kayak, 2 adults + 2 kids paddling",
+   dam:[[0,1,2],[1,3,1],[8,9,1],[9,11,2],[11,22,3],[22,23,2],[23,24,1]],
+   note:"just floating, family pace; ~13,300 cfs held flat 1 PM-9 PM"}
 ];
 
 // How much further the water actually carries you than the centreline says. Tyler runs
@@ -704,7 +721,7 @@ function scheduleFor(date,avgCfs){
   const FULL=23.5;                      // close enough to a whole day to stop layering
 
   const obsTo=OBSERVED_COVER[iso]||0;
-  const obs=(OBSERVED_BLOCKS[iso]||[]).map(b=>({s:b[0],e:b[1],u:b[2],src:"observed"}));
+  const obs=(OBSERVED_BLOCKS[iso]||[]).map(b=>({s:b[0],e:b[1],u:b[2],q:b[3],src:"observed"}));
   if(obsTo>=FULL) return {blocks:obs,src:"observed",weekend};
 
   // Published, trimmed to the day's volume exactly as before, then clipped to the
@@ -716,7 +733,7 @@ function scheduleFor(date,avgCfs){
               .filter(b=>b.e>b.s);
 
   const after=Math.max(obsTo,pubTo);
-  const spent=obs.concat(pub).reduce((t,b)=>t+UNIT_CFS[b.u]*(b.e-b.s),0);
+  const spent=obs.concat(pub).reduce((t,b)=>t+(b.q||UNIT_CFS[b.u])*(b.e-b.s),0);
   const mod=after>=FULL?[]:synthesise(date,avgCfs,{after,spent}).blocks;
 
   const src = obs.length ? (pub.length?"observed+published":mod.length?"observed+model":"observed")
@@ -770,7 +787,7 @@ function effectiveCfs(q,durationH,x){
 function waterOn(x,t,blocks){
   let best=0;
   for(const b of blocks){
-    const q=UNIT_CFS[b.u]; if(!q) continue;
+    const q=b.q||UNIT_CFS[b.u]; if(!q) continue;   // measured flow wins
     const head=travelH(x,q); if(head===null) continue;
     const D=b.e-b.s, sp=spreadH(x);
     const eff=effectiveCfs(q,D,x);
@@ -898,37 +915,47 @@ function parseObservedBlocks(rows){
     const k=isoOf(day), to=(sm.end-day)/36e5;
     cover[k]=Math.max(cover[k]||0,to);
   }
-  const out={}; let run=null;
+  const out={}; let run=null;   // run.q collects the measured discharge of the run
   // A run that crosses midnight has to appear on BOTH days. Filing it only under the
   // start day as hours 22-26 left the next morning with no water on it at all, even
   // though the river was still up when you woke.
   const flush=()=>{ if(!run)return;
     let day=new Date(run.start); day.setHours(0,0,0,0);
     let s=(run.start-day)/36e5, e=(run.end-day)/36e5;
+    const q=Math.round(run.q.reduce((a,b)=>a+b,0)/run.q.length);   // measured, not nameplate
     while(e>24){
-      (out[isoOf(day)]=out[isoOf(day)]||[]).push([s,24,run.u]);
+      (out[isoOf(day)]=out[isoOf(day)]||[]).push([s,24,run.u,q]);
       day=new Date(day); day.setDate(day.getDate()+1);
       s=0; e-=24;
     }
-    if(e>s) (out[isoOf(day)]=out[isoOf(day)]||[]).push([s,e,run.u]);
+    if(e>s) (out[isoOf(day)]=out[isoOf(day)]||[]).push([s,e,run.u,q]);
     run=null; };
   for(const sm of S){
     const u=classify_discharge_js(sm.cfs);
     const st=new Date(sm.end); st.setHours(st.getHours()-1);
     if(!u){ flush(); continue; }
-    if(run && run.u===u && +run.end===+st) run.end=sm.end;
-    else { flush(); run={start:st,end:sm.end,u}; }
+    if(run && run.u===u && +run.end===+st){ run.end=sm.end; run.q.push(sm.cfs); }
+    else { flush(); run={start:st,end:sm.end,u,q:[sm.cfs]}; }
   }
   flush();
   if(Object.keys(cover).length) OBSERVED_COVER=cover;
   return out;
 }
+// Turn a measured discharge into a unit count for LABELLING. The old version only
+// matched within 900 cfs of 0/3890/7610/11150 and returned null for anything else --
+// so 09/06, which TVA held flat at ~13,300 cfs from 1 PM to 9 PM, classified as NO
+// GENERATION for nine straight hours. The app called the biggest water of the day
+// dead water. Cherokee runs well above three units' nameplate and always has; the
+// table was never the whole truth.
+//
+// Now: nearest unit count, no upper wall. The measured cfs is carried separately on
+// each block (see parseObservedBlocks) so nothing downstream has to round-trip
+// through this table and lose the real number.
 function classify_discharge_js(cfs){
   if(cfs==null) return null;
-  let best=null,gap=null;
-  for(const k in UNIT_CFS){ const u=+k, g=Math.abs(cfs-UNIT_CFS[u]);
-    if(g<=900 && (gap===null||g<gap)){best=u;gap=g;} }
-  return best||null;
+  if(cfs<900) return null;                      // effectively off
+  const per=UNIT_CFS[1];
+  return Math.max(1,Math.round(cfs/per));
 }
 
 // Forward schedule. Midnight resolves BY POSITION here -- a range ENDING at
@@ -1311,9 +1338,9 @@ function render(){
   /* stats */
   const _pm=milesBelow(put.rm);
   const firstUse=sch.blocks.filter(b=>b.u>0 &&
-      effectiveCfs(UNIT_CFS[b.u],b.e-b.s,_pm)>=MIN_USABLE_CFS)
+      effectiveCfs(b.q||UNIT_CFS[b.u],b.e-b.s,_pm)>=MIN_USABLE_CFS)
     .sort((a,c)=>a.s-c.s)[0];
-  const head=firstUse?travelH(_pm,UNIT_CFS[firstUse.u]):null;
+  const head=firstUse?travelH(_pm,firstUse.q||UNIT_CFS[firstUse.u]):null;
   const S=$("stats"); S.innerHTML="";
   const st=(l,v,n,sub)=>{const d=document.createElement("div");d.className="st";
     d.innerHTML=`<div class="l">${l}</div><div class="v">${v}</div>`+
@@ -1402,7 +1429,7 @@ function drawTrip(sim,sch,sun,launch,put,take,date){
     T(s,X(h),H-B+17,clock(h).replace(":00",""),{anchor:"middle",size:10.5});}
 
   // wave head + tail for each block
-  sch.blocks.forEach(b=>{const q=UNIT_CFS[b.u]; if(!q)return;
+  sch.blocks.forEach(b=>{const q=b.q||UNIT_CFS[b.u]; if(!q)return;
     const pts=(off,fn)=>{const a=[];for(let x=Math.max(x0,0);x<=x1;x+=0.5){
       const h=fn(x); if(h==null)continue; a.push([X(off+h),Y(x)]);} return a;};
     const D=b.e-b.s;
