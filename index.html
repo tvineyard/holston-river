@@ -732,14 +732,48 @@ function scheduleFor(date,avgCfs){
               .map(b=>({...b,s:Math.max(b.s,obsTo)}))
               .filter(b=>b.e>b.s);
 
+  // CARRY THE CURRENT RELEASE FORWARD. TVA's record stops at the hour just gone, but
+  // the water does not. If the last observed block runs right up to the edge of the
+  // record, the river is still running at that throughput, so the hours the schedule
+  // still shows as generating inherit the LAST MEASURED flow instead of the posted
+  // "2 or more" nameplate.
+  //
+  // This matters more than it looks, because of the next step: attenuation is driven
+  // by how LONG a release runs. Cut at the edge of the record, today's release was a
+  // 3-hour pulse and flattened to 12,689 x 3/(3+5.06) = 4,723 cfs by the house --
+  // never enough to reach full float speed. Carried to the end of the schedule it is
+  // one 13-hour release that arrives at full strength, which is what actually happens.
+  const lastObs=obs[obs.length-1];
+  const stillRunning=lastObs && lastObs.q && Math.abs(lastObs.e-obsTo)<0.02;
+  const pubC=stillRunning
+    ? pub.map(b=>({...b,u:lastObs.u,q:lastObs.q,src:"carried"}))
+    : pub;
+
   const after=Math.max(obsTo,pubTo);
-  const spent=obs.concat(pub).reduce((t,b)=>t+(b.q||UNIT_CFS[b.u])*(b.e-b.s),0);
+  const spent=obs.concat(pubC).reduce((t,b)=>t+(b.q||UNIT_CFS[b.u])*(b.e-b.s),0);
   const mod=after>=FULL?[]:synthesise(date,avgCfs,{after,spent}).blocks;
 
-  const src = obs.length ? (pub.length?"observed+published":mod.length?"observed+model":"observed")
-            : pub.length ? (mod.length?"published+model":"published")
+  const src = obs.length ? (pubC.length?"observed+published":mod.length?"observed+model":"observed")
+            : pubC.length ? (mod.length?"published+model":"published")
             : "model";
-  return {blocks:obs.concat(pub,mod),src,weekend};
+  return {blocks:mergeRuns(obs.concat(pubC,mod)),src,weekend};
+}
+
+// Touching blocks at the same unit count are ONE release, not several. The seams come
+// from how the day is assembled -- observed up to the record, then carried, then
+// modelled -- and they are an artefact of where the record ends. Leaving them split
+// would make a long steady release attenuate like a string of short pulses.
+function mergeRuns(list){
+  const out=[];
+  for(const b of list.slice().sort((a,c)=>a.s-c.s)){
+    const p=out[out.length-1];
+    if(p && p.u===b.u && Math.abs(b.s-p.e)<0.02){
+      const dp=p.e-p.s, db=b.e-b.s;
+      p.q=Math.round(((p.q||UNIT_CFS[p.u])*dp+(b.q||UNIT_CFS[b.u])*db)/(dp+db));
+      p.e=b.e;
+    } else out.push({...b});
+  }
+  return out;
 }
 
 // The day's release written out the way you'd say it: "2 turbines 10:00 AM to 8:00 PM".
